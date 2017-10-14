@@ -1,6 +1,12 @@
 #!/usr/bin/python3
 
 import boto3
+import base64
+
+# UserData script - need to base64 encode string unless loaded from file (encoded by cli)
+installNginx = base64.b64encode(b''' #!/bin/bash
+yum -y update
+yum install -y nginx''')
 
 # Creates a new ec2 instance - ImageId in the Ohio region
 ec2 = boto3.resource('ec2')
@@ -25,6 +31,7 @@ instance = ec2.create_instances(
     # Id of security group already created with http enabled
     SecurityGroupIds=[
         'sg-3e9a1056',
-    ]
+    ],
+    UserData=installNginx
 )
 print (instance[0].id)
