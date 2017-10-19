@@ -17,8 +17,7 @@ instance = ec2.create_instances(
     MinCount=1,
     MaxCount=1,
     InstanceType='t2.micro',
-    # Name of the key to enable ssh
-    KeyName='kfan-ohio',
+    KeyName='kfan-ohio',  # Name of the key to enable ssh
     TagSpecifications=[
         {
             'ResourceType': 'instance',
@@ -30,41 +29,35 @@ instance = ec2.create_instances(
             ]
         },
     ],
-    # Id of security group already created with http enabled
     SecurityGroupIds=[
-        'sg-3e9a1056',
+        'sg-3e9a1056',  # Id of security group already created with http & ssh enabled
     ],
     UserData=installNginx
 )
 
-print ('Id of newly create instance:' + instance[0].id)
+createdInstance = instance[0]  # Variable to store instance as object so that do not need to keep referring to list
+instanceId = createdInstance.id  # Store the id of the created instance
+instancePublicIp = ''  # Used to eventually store the instance public ip
+print ('Id of newly create instance:' + instanceId)
 
-createdInstanceId = instance[0].id  # Store the id of the created instance
-instancePublicIp = ''
-
-for instance in ec2.instances.all():  # Get all your instances and loop through them
-    if instance.id == createdInstanceId:  # If the instance id is the newly created instance
-        print ('Waiting for instance to get a public ip to access later')
-        while True:  # loop through till break condition
-            instance.reload()
-            if instance.public_ip_address:  # if the created instance gets an public ip
-                instancePublicIp = instance.public_ip_address  # store the public ip for ssh later
-                print ('Public ip address of instance is: ', instancePublicIp)
-                break
-
-print ('Waiting for the instance to be pass checks, cannot ssh until then :( , will take about 2 minutes')
+print ('Waiting for instance to get a public ip to access later')
+while True:  # loop through till break condition (when the instance get's public ip)
+    createdInstance.reload()  # reload the instance property
+    if createdInstance.public_ip_address:  # if the created instance gets an public ip
+        instancePublicIp = createdInstance.public_ip_address  # store the public ip for ssh later
+        print ('Public ip address of instance is: ', instancePublicIp)
+        break
 
 # Poll your new instance every 15 seconds until a successful state is reached.
 # An error is returned after 40 failed checks.
-
+print ('Waiting for the instance to be pass checks, cannot ssh until then :( , will take about 2 minutes')
 client = boto3.client('ec2')
 waiter = client.get_waiter('instance_status_ok')
 waiter.wait(
     InstanceIds=[
-        createdInstanceId,
+        instanceId,
     ]
 )
-
 print ('Instance has passed status checks and now can be accessed by ssh!!')
 
 # Simple check does ssh work by passing pwd to ssh command to instance
@@ -72,14 +65,13 @@ sshCheckCmd = "ssh -t -o StrictHostKeyChecking=no -i kfan-ohio.pem ec2-user@" + 
 print ('Going to check does ssh work with simple pwd command on instance')
 (status, output) = subprocess.getstatusoutput(sshCheckCmd)
 if status == 0:
-    print ('Simple ssh passed!!')
+    print ('Simple ssh passed!!.: ' + output)
 else:
-    print ('Simple ssh fail')
+    print ('Simple ssh failed')
     print (status, output)
 
 # Copy check_webserver.py to instance
-copyCheckWebServerCmd = 'scp -i kfan-ohio.pem check_webserver.py ec2-user@' \
-                        + instancePublicIp + ':.'
+copyCheckWebServerCmd = 'scp -i kfan-ohio.pem check_webserver.py ec2-user@' + instancePublicIp + ':.'
 print ('Now trying to copy check_webserver to new instance with: ' + copyCheckWebServerCmd)
 (status, output) = subprocess.getstatusoutput(copyCheckWebServerCmd)
 if status == 0:
@@ -88,7 +80,8 @@ else:
     print ('Copy check_webserver.py failed :(')
 
 # Run check_webserver.py on instance
-sshRunCheckCmd = "ssh -t -o StrictHostKeyChecking=no -i kfan-ohio.pem ec2-user@" + instancePublicIp + " './check_webserver.py'"
+sshRunCheckCmd = "ssh -t -o StrictHostKeyChecking=no -i kfan-ohio.pem ec2-user@" \
+                 + instancePublicIp + " './check_webserver.py'"
 print ('Now trying to run check_webserver in new instance with: ' + sshRunCheckCmd)
 (status, output) = subprocess.getstatusoutput(sshRunCheckCmd)
 if status == 0:
