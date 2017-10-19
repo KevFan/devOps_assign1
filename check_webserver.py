@@ -10,17 +10,18 @@ def start_nginx():
     if status == 0:
         print ('Nginx is now up and running')
     else:
-        print ('Something is wrong :(')
+        print ('Start nginx - something is wrong :(')
         print (status, output)
 
 
 # Function to check is nginx running (assuming it has been installed)
 def check_nginx():
-    cmd = 'ps -A | grep nginx | grep -v grep'
+    cmd = 'ps -A | grep nginx'
     (status, output) = subprocess.getstatusoutput(cmd)
-    print('The status is', status)
     if status == 0:
-        print('Nginx is not running')
+        print ('Nginx server is already running')
+    else:
+        print ('Nginx server is NOT running')
         start_nginx()
 
 
