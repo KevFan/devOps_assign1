@@ -67,6 +67,7 @@ waiter.wait(
 
 print ('Instance has passed status checks and now can be accessed by ssh!!')
 
+# Simple check does ssh work by passing pwd to ssh command to instance
 sshCheckCmd = "ssh -t -o StrictHostKeyChecking=no -i kfan-ohio.pem ec2-user@" + instancePublicIp + " 'sudo pwd'"
 print ('Going to check does ssh work with simple pwd command on instance')
 (status, output) = subprocess.getstatusoutput(sshCheckCmd)
@@ -76,6 +77,7 @@ else:
     print ('Simple ssh fail')
     print (status, output)
 
+# Copy check_webserver.py to instance
 copyCheckWebServerCmd = 'scp -i kfan-ohio.pem check_webserver.py ec2-user@' \
                         + instancePublicIp + ':.'
 print ('Now trying to copy check_webserver to new instance with: ' + copyCheckWebServerCmd)
@@ -85,3 +87,13 @@ if status == 0:
 else:
     print ('Copy check_webserver.py failed :(')
 
+# Run check_webserver.py on instance
+sshRunCheckCmd = "ssh -t -o StrictHostKeyChecking=no -i kfan-ohio.pem ec2-user@" + instancePublicIp + " './check_webserver.py'"
+print ('Now trying to run check_webserver in new instance with: ' + sshRunCheckCmd)
+(status, output) = subprocess.getstatusoutput(sshRunCheckCmd)
+if status == 0:
+    print ('Successfully run the check_webserver.py on instance')
+    print (status, output)
+else:
+    print ('Run check_webserver.py failed')
+    print (status, output)
