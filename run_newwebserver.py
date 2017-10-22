@@ -4,6 +4,8 @@ import boto3
 import base64
 import subprocess
 
+s3 = boto3.resource("s3")
+
 # UserData script - need to base64 encode string unless loaded from file (encoded by cli)
 installNginx = base64.b64encode(b''' #!/bin/bash
                                     yum -y update
@@ -102,17 +104,64 @@ def run_check_webserver(public_ip):
         print (status, output)
 
 
+# Create a new bucket
+def create_bucket():
+    import datetime
+    # bucket name must be unique and have no upper case characters
+    bucket_name = (datetime.datetime.now().strftime("%d-%m-%y-%h-%m-%s") + 'secretbucket').lower()
+    try:
+        response = s3.create_bucket(Bucket=bucket_name,
+                                    CreateBucketConfiguration={'LocationConstraint': 'us-east-2'})
+        print (response)
+        while not s3.Bucket(bucket_name) in s3.buckets.all():
+            print ('Bucket does not exist yet')
+        return bucket_name
+    except Exception as error:
+        print (error)
+
+
+# Puts a file into a bucket
+def put_file_in_bucket(bucket_name, object_name):
+    try:
+        response = s3.Object(bucket_name, object_name).put(ACL='public-read',  # make public readable
+                                                           Body=open(object_name, 'rb'))
+        print (response)
+    except Exception as error:
+        print (error)
+
+
+# Returns the url of a object in a bucket
+# https://stackoverflow.com/questions/43973658/how-to-access-image-by-url-on-s3-using-boto3
+# http://boto3.readthedocs.io/en/latest/reference/services/s3.html#S3.Client.generate_presigned_url
+def get_file_url(bucket_name, object_name):
+    client = boto3.client('s3')
+    url = client.generate_presigned_url('get_object',
+                                        Params={
+                                            'Bucket': bucket_name,
+                                            'Key': object_name,
+                                        },
+                                        ExpiresIn=3600)
+    print (url)
+
+
 # Main function
 def main():
     # Variable to store instance as object so that do not need to keep referring to list
-    created_instance = create_instance()
-    instance_id = created_instance.id  # Store the id of the created instance
-    print ('Id of newly create instance: ' + instance_id)
-    instance_public_ip = wait_till_public_ip(created_instance)  # Used to eventually store the instance public ip
-    wait_till_passed_checks(instance_id)
-    check_ssh(instance_public_ip)
-    copy_check_webserver(instance_public_ip)
-    run_check_webserver(instance_public_ip)
+    try:
+        created_instance = create_instance()
+        instance_id = created_instance.id  # Store the id of the created instance
+        print ('Id of newly create instance: ' + instance_id)
+        instance_public_ip = wait_till_public_ip(created_instance)  # Used to eventually store the instance public ip
+        wait_till_passed_checks(instance_id)
+        check_ssh(instance_public_ip)
+        copy_check_webserver(instance_public_ip)
+        run_check_webserver(instance_public_ip)
+        created_bucket_name = create_bucket()  # create bucket with predefined name and returns name
+        file_name = input('Name/Path of file to put into bucket: ')  # get file name to upload to bucket
+        put_file_in_bucket(created_bucket_name, file_name)  # upload to file to bucket
+        get_file_url(created_bucket_name, file_name)  # print out the url to file
+    except Exception as error:
+        print (error)
 
 
 # This is the standard boilerplate that calls the main() function.
