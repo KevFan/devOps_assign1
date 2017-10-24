@@ -50,11 +50,11 @@ def wait_till_public_ip(instance):
             public_ip = instance.public_ip_address  # store the public ip for ssh later
             print ('Instance Public IP: ', public_ip)
             return public_ip
-            break
 
 
 # Function to poll your new instance every 15 seconds until a successful state is reached using boto3 api
 # An error is returned after 40 failed checks.
+# http://boto3.readthedocs.io/en/latest/reference/services/ec2.html#EC2.Waiter.InstanceStatusOk
 def wait_till_passed_checks(instance_id):
     print ('Waiting for instance to pass checks, cannot ssh until then :( , will take 2 minutes or longer')
     client = boto3.client('ec2')
@@ -141,7 +141,52 @@ def get_file_url(bucket_name, object_name):
                                             'Key': object_name,
                                         },
                                         ExpiresIn=3600)
-    print (url)
+    split = url.split('?X')  # split url into a list at '?X' as the above generates a url link that will be expired
+    return split[0]  # Return the url with no expiry date
+
+
+# Change the file permission for write access of index.html - needed to echo into file for image appending later
+def change_index_file_permission(public_ip):
+    ssh_permission_cmd = "ssh -t -o StrictHostKeyChecking=no -i kfan-ohio.pem ec2-user@" \
+                     + public_ip + " 'sudo chmod 646 /usr/share/nginx/html/index.html'"
+    print ('Trying to change permission on index.html')
+    (status, output) = subprocess.getstatusoutput(ssh_permission_cmd)
+    if status == 0:
+        print ('Successfully changed the file permission')
+    else:
+        print ('Failed to change file permission')
+        print (status, output)
+
+
+# Append image uploaded to bucket to the end of index.html of nginx
+def append_image_to_index(public_ip, image_url):
+    # Attempt to use sed to append to html body - didn't work as intended :(
+    # cmd = " ''sudo sed -i 's#</body>#<img src=" + '"' + image_url + '"' + "></body>#g' /usr/share/nginx/html/index.html'"
+    # ssh_cmd = "ssh -t -o StrictHostKeyChecking=no -i kfan-ohio.pem ec2-user@" + public_ip + cmd
+    #                     # + " './check_webserver.py'"
+    # print ('Now trying to append image url to index html')
+    # (status, output) = subprocess.getstatusoutput(ssh_cmd)
+    # if status == 0:
+    #     print ('Successfully appended to index ')
+    # else:
+    #     print ('Image append failed')
+    #     print (ssh_cmd)
+    #     print (status, output)
+
+    # Use echo to append to the bottom of the index.html
+    str = '"<img src=' + '"' + image_url + '">' + '"'  # enclose html in img tags and in string
+
+    cmd = " 'sudo echo " + str + " >> /usr/share/nginx/html/index.html'"  # compose bash command to pass by ssh
+
+    ssh_cmd = "ssh -t -o StrictHostKeyChecking=no -i kfan-ohio.pem ec2-user@" + public_ip + cmd
+    print ('Now trying to append image url to index html with: ' + ssh_cmd)
+    (status, output) = subprocess.getstatusoutput(ssh_cmd)
+    if status == 0:
+        print ('Successfully appended to index ')
+    else:
+        print ('Image append failed')
+        print (ssh_cmd)
+        print (status, output)
 
 
 # Main function
@@ -159,7 +204,8 @@ def main():
         created_bucket_name = create_bucket()  # create bucket with predefined name and returns name
         file_name = input('Name/Path of file to put into bucket: ')  # get file name to upload to bucket
         put_file_in_bucket(created_bucket_name, file_name)  # upload to file to bucket
-        get_file_url(created_bucket_name, file_name)  # print out the url to file
+        change_index_file_permission(instance_public_ip)
+        append_image_to_index(instance_public_ip, get_file_url(created_bucket_name, file_name))
     except Exception as error:
         print (error)
 
