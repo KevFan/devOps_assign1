@@ -205,8 +205,8 @@ def main():
     try:
         # Get instance info from the user
         instance_name = input("Enter the name of your instance?: ")
-        key_path = utils.get_abs_file_path("Enter path to your private key: ")
-        key_name = utils.get_key_name_from_path(key_path)
+        key_path = utils.get_valid_key("Enter path to your private key: ")
+        key_name = utils.get_file_name_from_path(key_path)
 
         # Create instance related
         created_instance = create_instance(instance_name, key_name)
