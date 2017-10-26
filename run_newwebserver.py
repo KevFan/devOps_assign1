@@ -3,6 +3,7 @@
 import boto3
 import base64
 import subprocess
+import utils
 
 s3 = boto3.resource("s3")
 
@@ -13,32 +14,37 @@ installNginx = base64.b64encode(b''' #!/bin/bash
                                     yum install -y nginx''')
 
 
-# Creates a new ec2 instance - ImageId in the Ohio region
-def create_instance():
-    ec2 = boto3.resource('ec2')
-    instance = ec2.create_instances(
-        ImageId='ami-c5062ba0',
-        MinCount=1,
-        MaxCount=1,
-        InstanceType='t2.micro',
-        KeyName='kfan-ohio',  # Name of the key to enable ssh
-        TagSpecifications=[
-            {
-                'ResourceType': 'instance',
-                'Tags': [
-                    {
-                        'Key': 'Name',
-                        'Value': 'Nginx-Webserver'
-                    },
-                ]
-            },
-        ],
-        SecurityGroupIds=[
-            'sg-3e9a1056',  # Id of security group already created with http & ssh enabled
-        ],
-        UserData=installNginx
-    )
-    return instance[0]
+# Creates a new ec2 instance - ImageId in the Ireland region - requires the config file to be set in eu-west-1
+def create_instance(instance_name, key_name):
+    try:
+        ec2 = boto3.resource('ec2')
+        instance = ec2.create_instances(
+            ImageId='ami-acd005d5',
+            MinCount=1,
+            MaxCount=1,
+            InstanceType='t2.micro',
+            KeyName=key_name,  # Name of the key to enable ssh
+            TagSpecifications=[
+                {
+                    'ResourceType': 'instance',
+                    'Tags': [
+                        {
+                            'Key': 'Name',
+                            'Value': instance_name
+                        },
+                    ]
+                },
+            ],
+            SecurityGroupIds=[
+                'sg-8842b9f3',  # Id of security group already created with http & ssh enabled
+            ],
+            UserData=installNginx
+        )
+        print ('Id of newly create instance: ' + instance[0].id)
+        return instance[0]
+    except Exception as error:
+        print ('Instance creation failed')
+        print (error)
 
 
 # Function to wait till instance get's a public ip and returns the public ip
@@ -68,8 +74,8 @@ def wait_till_passed_checks(instance_id):
 
 
 # Simple check does ssh work by passing pwd to ssh command to instance
-def check_ssh(public_ip):
-    ssh_check_cmd = "ssh -t -o StrictHostKeyChecking=no -i kfan-ohio.pem ec2-user@" + public_ip + " 'sudo pwd'"
+def check_ssh(public_ip, key_path):
+    ssh_check_cmd = "ssh -t -o StrictHostKeyChecking=no -i " + key_path + " ec2-user@" + public_ip + " 'sudo pwd'"
     print ('Going to check does ssh work with simple pwd command on instance')
     (status, output) = subprocess.getstatusoutput(ssh_check_cmd)
     if status == 0:
@@ -80,8 +86,8 @@ def check_ssh(public_ip):
 
 
 # Copy check_webserver.py to instance
-def copy_check_webserver(public_ip):
-    copy_check_web_server_cmd = 'scp -i kfan-ohio.pem check_webserver.py ec2-user@' + public_ip + ':.'
+def copy_check_webserver(public_ip, key_path):
+    copy_check_web_server_cmd = 'scp -i ' + key_path + ' check_webserver.py ec2-user@' + public_ip + ':.'
     print ('Now trying to copy check_webserver to new instance with: ' + copy_check_web_server_cmd)
     (status, output) = subprocess.getstatusoutput(copy_check_web_server_cmd)
     if status == 0:
@@ -91,8 +97,8 @@ def copy_check_webserver(public_ip):
 
 
 # Run check_webserver.py on instance
-def run_check_webserver(public_ip):
-    ssh_run_check_cmd = "ssh -t -o StrictHostKeyChecking=no -i kfan-ohio.pem ec2-user@" \
+def run_check_webserver(public_ip, key_path):
+    ssh_run_check_cmd = "ssh -t -o StrictHostKeyChecking=no -i " + key_path + " ec2-user@" \
                      + public_ip + " './check_webserver.py'"
     print ('Now trying to run check_webserver in new instance with: ' + ssh_run_check_cmd)
     (status, output) = subprocess.getstatusoutput(ssh_run_check_cmd)
@@ -111,7 +117,7 @@ def create_bucket():
     bucket_name = (datetime.datetime.now().strftime("%d-%m-%y-%h-%m-%s") + 'secretbucket').lower()
     try:
         response = s3.create_bucket(Bucket=bucket_name,
-                                    CreateBucketConfiguration={'LocationConstraint': 'us-east-2'})
+                                    CreateBucketConfiguration={'LocationConstraint': 'eu-west-1'})
         print (response)
         while not s3.Bucket(bucket_name) in s3.buckets.all():
             print ('Bucket does not exist yet')
@@ -121,6 +127,7 @@ def create_bucket():
 
 
 # Puts a file into a bucket
+# TODO: if file is a relative path - problems
 def put_file_in_bucket(bucket_name, object_name):
     try:
         response = s3.Object(bucket_name, object_name).put(ACL='public-read',  # make public readable
@@ -141,13 +148,13 @@ def get_file_url(bucket_name, object_name):
                                             'Key': object_name,
                                         },
                                         ExpiresIn=3600)
-    split = url.split('?X')  # split url into a list at '?X' as the above generates a url link that will be expired
+    split = url.split('?')  # split url into a list at '?' as the above generates a url link that will be expired
     return split[0]  # Return the url with no expiry date
 
 
 # Change the file permission for write access of index.html - needed to echo into file for image appending later
-def change_index_file_permission(public_ip):
-    ssh_permission_cmd = "ssh -t -o StrictHostKeyChecking=no -i kfan-ohio.pem ec2-user@" \
+def change_index_file_permission(public_ip, key_path):
+    ssh_permission_cmd = "ssh -t -o StrictHostKeyChecking=no -i " + key_path +" ec2-user@" \
                      + public_ip + " 'sudo chmod 646 /usr/share/nginx/html/index.html'"
     print ('Trying to change permission on index.html')
     (status, output) = subprocess.getstatusoutput(ssh_permission_cmd)
@@ -159,7 +166,7 @@ def change_index_file_permission(public_ip):
 
 
 # Append image uploaded to bucket to the end of index.html of nginx
-def append_image_to_index(public_ip, image_url):
+def append_image_to_index(public_ip, image_url, key_path):
     # Attempt to use sed to append to html body - didn't work as intended :(
     # cmd = " ''sudo sed -i 's#</body>#<img src=" + '"' + image_url + '"' + "></body>#g' /usr/share/nginx/html/index.html'"
     # ssh_cmd = "ssh -t -o StrictHostKeyChecking=no -i kfan-ohio.pem ec2-user@" + public_ip + cmd
@@ -178,7 +185,7 @@ def append_image_to_index(public_ip, image_url):
 
     cmd = " 'sudo echo " + str + " >> /usr/share/nginx/html/index.html'"  # compose bash command to pass by ssh
 
-    ssh_cmd = "ssh -t -o StrictHostKeyChecking=no -i kfan-ohio.pem ec2-user@" + public_ip + cmd
+    ssh_cmd = "ssh -t -o StrictHostKeyChecking=no -i " + key_path + " ec2-user@" + public_ip + cmd
     print ('Now trying to append image url to index html with: ' + ssh_cmd)
     (status, output) = subprocess.getstatusoutput(ssh_cmd)
     if status == 0:
@@ -193,19 +200,25 @@ def append_image_to_index(public_ip, image_url):
 def main():
     # Variable to store instance as object so that do not need to keep referring to list
     try:
-        created_instance = create_instance()
+        instance_name = input("Enter the name of your instance?: ")
+        key_path = utils.get_abs_file_path("Enter path to your private key: ")
+        key_name = utils.get_key_name_from_path(key_path)
+
+        created_instance = create_instance(instance_name, key_name)
         instance_id = created_instance.id  # Store the id of the created instance
-        print ('Id of newly create instance: ' + instance_id)
         instance_public_ip = wait_till_public_ip(created_instance)  # Used to eventually store the instance public ip
         wait_till_passed_checks(instance_id)
-        check_ssh(instance_public_ip)
-        copy_check_webserver(instance_public_ip)
-        run_check_webserver(instance_public_ip)
+
+        check_ssh(instance_public_ip, key_path)
+        copy_check_webserver(instance_public_ip, key_path)
+        run_check_webserver(instance_public_ip, key_path)
+
         created_bucket_name = create_bucket()  # create bucket with predefined name and returns name
-        file_name = input('Name/Path of file to put into bucket: ')  # get file name to upload to bucket
-        put_file_in_bucket(created_bucket_name, file_name)  # upload to file to bucket
-        change_index_file_permission(instance_public_ip)
-        append_image_to_index(instance_public_ip, get_file_url(created_bucket_name, file_name))
+        file_path = input('Path of file to put into bucket: ')  # get file name to upload to bucket
+        put_file_in_bucket(created_bucket_name, file_path)  # upload to file to bucket
+
+        change_index_file_permission(instance_public_ip, key_path)
+        append_image_to_index(instance_public_ip, get_file_url(created_bucket_name, file_path), key_path)
     except Exception as error:
         print (error)
 
