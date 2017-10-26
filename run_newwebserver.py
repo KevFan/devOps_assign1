@@ -5,6 +5,7 @@ import base64
 import subprocess
 import utils
 import os
+import sys
 
 s3 = boto3.resource("s3")
 
@@ -44,14 +45,15 @@ def create_instance(instance_name, key_name):
         print ('Id of newly create instance: ' + instance[0].id)
         return instance[0]
     except Exception as error:
-        print ('Instance creation failed')
+        print ('Instance creation failed - exiting')
         print (error)
+        sys.exit(1)
 
 
 # Function to wait till instance get's a public ip and returns the public ip
 def wait_till_public_ip(instance):
     print ('Waiting for instance to get a public ip to access later')
-    while True:  # loop through till break condition (when the instance get's public ip)
+    while not instance.public_ip_address:  # loop through till break condition (when the instance get's public ip)
         instance.reload()  # reload the instance property
         if instance.public_ip_address:  # if the created instance gets an public ip
             public_ip = instance.public_ip_address  # store the public ip for ssh later
@@ -84,6 +86,7 @@ def check_ssh(public_ip, key_path):
     else:
         print ('Simple ssh failed')
         print (status, output)
+        sys.exit(1)
 
 
 # Copy check_webserver.py to instance
@@ -115,16 +118,16 @@ def run_check_webserver(public_ip, key_path):
 def create_bucket():
     import datetime
     # bucket name must be unique and have no upper case characters
-    bucket_name = (datetime.datetime.now().strftime("%d-%m-%y-%h-%m-%s") + 'secretbucket').lower()
-    try:
-        response = s3.create_bucket(Bucket=bucket_name,
-                                    CreateBucketConfiguration={'LocationConstraint': 'eu-west-1'})
-        print (response)
-        while not s3.Bucket(bucket_name) in s3.buckets.all():
-            print ('Bucket does not exist yet')
-        return bucket_name
-    except Exception as error:
-        print (error)
+    # bucket_name = (datetime.datetime.now().strftime("%d-%m-%y-%h-%m-%s") + 'secretbucket').lower()
+    while True:
+        bucket_name = input("Bucket name: ").lower()
+        try:
+            response = s3.create_bucket(Bucket=bucket_name,
+                                        CreateBucketConfiguration={'LocationConstraint': 'eu-west-1'})
+            print (response)
+            return bucket_name
+        except Exception as error:
+            print (error)
 
 
 # Puts a file into a bucket
