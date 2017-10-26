@@ -4,6 +4,7 @@ import boto3
 import base64
 import subprocess
 import utils
+import os
 
 s3 = boto3.resource("s3")
 
@@ -127,11 +128,12 @@ def create_bucket():
 
 
 # Puts a file into a bucket
-# TODO: if file is a relative path - problems
 def put_file_in_bucket(bucket_name, object_name):
-    try:
-        response = s3.Object(bucket_name, object_name).put(ACL='public-read',  # make public readable
-                                                           Body=open(object_name, 'rb'))
+    try:  # set object name to just the base name as would otherwise create the folders to file.
+        # Would have problems, especially when path to object is relative and when getting file link
+        response = s3.Object(bucket_name, os.path.basename(object_name)).put(
+            ACL='public-read',  # make public readable
+            Body=open(object_name, 'rb'))
         print (response)
     except Exception as error:
         print (error)
@@ -148,6 +150,7 @@ def get_file_url(bucket_name, object_name):
                                             'Key': object_name,
                                         },
                                         ExpiresIn=3600)
+    print (url)
     split = url.split('?')  # split url into a list at '?' as the above generates a url link that will be expired
     return split[0]  # Return the url with no expiry date
 
@@ -200,25 +203,31 @@ def append_image_to_index(public_ip, image_url, key_path):
 def main():
     # Variable to store instance as object so that do not need to keep referring to list
     try:
+        # Get instance info from the user
         instance_name = input("Enter the name of your instance?: ")
         key_path = utils.get_abs_file_path("Enter path to your private key: ")
         key_name = utils.get_key_name_from_path(key_path)
 
+        # Create instance related
         created_instance = create_instance(instance_name, key_name)
         instance_id = created_instance.id  # Store the id of the created instance
         instance_public_ip = wait_till_public_ip(created_instance)  # Used to eventually store the instance public ip
         wait_till_passed_checks(instance_id)
 
+        # Ssh related
         check_ssh(instance_public_ip, key_path)
         copy_check_webserver(instance_public_ip, key_path)
         run_check_webserver(instance_public_ip, key_path)
 
+        # Bucket related
         created_bucket_name = create_bucket()  # create bucket with predefined name and returns name
-        file_path = input('Path of file to put into bucket: ')  # get file name to upload to bucket
+        file_path = utils.get_abs_file_path('Path of file to put into bucket: ')  # get file name to upload to bucket
         put_file_in_bucket(created_bucket_name, file_path)  # upload to file to bucket
 
+        # Image appending
         change_index_file_permission(instance_public_ip, key_path)
-        append_image_to_index(instance_public_ip, get_file_url(created_bucket_name, file_path), key_path)
+        append_image_to_index(instance_public_ip,
+                              get_file_url(created_bucket_name, os.path.basename(file_path)), key_path)
     except Exception as error:
         print (error)
 
