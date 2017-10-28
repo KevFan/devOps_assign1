@@ -1,19 +1,12 @@
 #!/usr/bin/python3
 
 import boto3
-import base64
 import subprocess
 import utils
 import os
 import sys
 
 s3 = boto3.resource("s3")
-
-# UserData script - need to base64 encode string unless loaded from file (encoded by cli)
-installNginx = base64.b64encode(b''' #!/bin/bash
-                                    yum -y update
-                                    yum install -y python35
-                                    yum install -y nginx''')
 
 
 # Creates a new ec2 instance - ImageId in the Ireland region - requires the config file to be set in eu-west-1
@@ -40,9 +33,12 @@ def create_instance(instance_name, key_name):
             SecurityGroupIds=[
                 'sg-8842b9f3',  # Id of security group already created with http & ssh enabled
             ],
-            UserData=installNginx
+            UserData='''#!/bin/bash
+                        yum -y update
+                        yum install -y python35
+                        yum install -y nginx'''
         )
-        utils.print_and_log('Id of newly create instance: ' + instance[0].id)
+        utils.print_and_log('Created instance Id: ' + instance[0].id)
         return instance[0]
     except Exception as error:
         utils.print_and_log('Instance creation failed - exiting')
@@ -78,7 +74,7 @@ def wait_till_passed_checks(instance_id):
 
 # Simple check does ssh work by passing pwd to ssh command to instance
 def check_ssh(public_ip, key_path):
-    ssh_check_cmd = "ssh -t -o StrictHostKeyChecking=no -i " + key_path + " ec2-user@" + public_ip + " 'sudo pwd'"
+    ssh_check_cmd = construct_ssh(key_path, public_ip, " 'sudo pwd'")
     utils.print_and_log('Going to check does ssh work with simple pwd command on instance')
     (status, output) = subprocess.getstatusoutput(ssh_check_cmd)
     if status == 0:
@@ -102,8 +98,7 @@ def copy_check_webserver(public_ip, key_path):
 
 # Run check_webserver.py on instance
 def run_check_webserver(public_ip, key_path):
-    ssh_run_check_cmd = "ssh -t -o StrictHostKeyChecking=no -i " + key_path + " ec2-user@" \
-                     + public_ip + " './check_webserver.py'"
+    ssh_run_check_cmd = construct_ssh(key_path, public_ip, " './check_webserver.py'")
     utils.print_and_log('Now trying to run check_webserver in new instance with: ' + ssh_run_check_cmd)
     (status, output) = subprocess.getstatusoutput(ssh_run_check_cmd)
     if status == 0:
@@ -116,9 +111,6 @@ def run_check_webserver(public_ip, key_path):
 
 # Create a new bucket
 def create_bucket():
-    import datetime
-    # bucket name must be unique and have no upper case characters
-    # bucket_name = (datetime.datetime.now().strftime("%d-%m-%y-%h-%m-%s") + 'secretbucket').lower()
     while True:
         bucket_name = input("Bucket name: ").lower()
         try:
@@ -160,8 +152,7 @@ def get_file_url(bucket_name, object_name):
 
 # Change the file permission for write access of index.html - needed to echo into file for image appending later
 def change_index_file_permission(public_ip, key_path):
-    ssh_permission_cmd = "ssh -t -o StrictHostKeyChecking=no -i " + key_path +" ec2-user@" \
-                     + public_ip + " 'sudo chmod 646 /usr/share/nginx/html/index.html'"
+    ssh_permission_cmd = construct_ssh(key_path, public_ip, " 'sudo chmod 646 /usr/share/nginx/html/index.html'")
     utils.print_and_log('Trying to change permission on index.html')
     (status, output) = subprocess.getstatusoutput(ssh_permission_cmd)
     if status == 0:
@@ -173,25 +164,12 @@ def change_index_file_permission(public_ip, key_path):
 
 # Append image uploaded to bucket to the end of index.html of nginx
 def append_image_to_index(public_ip, image_url, key_path):
-    # Attempt to use sed to append to html body - didn't work as intended :(
-    # cmd = " ''sudo sed -i 's#</body>#<img src=" + '"' + image_url + '"' + "></body>#g' /usr/share/nginx/html/index.html'"
-    # ssh_cmd = "ssh -t -o StrictHostKeyChecking=no -i kfan-ohio.pem ec2-user@" + public_ip + cmd
-    #                     # + " './check_webserver.py'"
-    # print ('Now trying to append image url to index html')
-    # (status, output) = subprocess.getstatusoutput(ssh_cmd)
-    # if status == 0:
-    #     print ('Successfully appended to index ')
-    # else:
-    #     print ('Image append failed')
-    #     print (ssh_cmd)
-    #     print (status, output)
-
     # Use echo to append to the bottom of the index.html
-    str = '"<img src=' + '"' + image_url + '">' + '"'  # enclose html in img tags and in string
+    str = '"<img src=\"' + image_url + '">\"'  # enclose html in img tags
 
     cmd = " 'sudo echo " + str + " >> /usr/share/nginx/html/index.html'"  # compose bash command to pass by ssh
 
-    ssh_cmd = "ssh -t -o StrictHostKeyChecking=no -i " + key_path + " ec2-user@" + public_ip + cmd
+    ssh_cmd = construct_ssh(key_path, public_ip, cmd)
     utils.print_and_log('Now trying to append image url to index html with: ' + ssh_cmd)
     (status, output) = subprocess.getstatusoutput(ssh_cmd)
     if status == 0:
@@ -199,6 +177,10 @@ def append_image_to_index(public_ip, image_url, key_path):
     else:
         utils.print_and_log('Image append failed')
         utils.print_and_log(output)
+
+
+def construct_ssh(key_path, public_ip, cmd):
+    return "ssh -t -o StrictHostKeyChecking=no -i " + key_path + " ec2-user@" + public_ip + cmd
 
 
 # Main function
