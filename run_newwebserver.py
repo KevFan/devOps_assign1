@@ -42,11 +42,11 @@ def create_instance(instance_name, key_name):
             ],
             UserData=installNginx
         )
-        print ('Id of newly create instance: ' + instance[0].id)
+        utils.print_and_log('Id of newly create instance: ' + instance[0].id)
         return instance[0]
     except Exception as error:
-        print ('Instance creation failed - exiting')
-        print (error)
+        utils.print_and_log('Instance creation failed - exiting')
+        utils.print_and_log(error)
         sys.exit(1)
 
 
@@ -57,7 +57,7 @@ def wait_till_public_ip(instance):
         instance.reload()  # reload the instance property
         if instance.public_ip_address:  # if the created instance gets an public ip
             public_ip = instance.public_ip_address  # store the public ip for ssh later
-            print ('Instance Public IP: ', public_ip)
+            utils.print_and_log('Instance Public IP: ' + public_ip)
             return public_ip
 
 
@@ -65,7 +65,7 @@ def wait_till_public_ip(instance):
 # An error is returned after 40 failed checks.
 # http://boto3.readthedocs.io/en/latest/reference/services/ec2.html#EC2.Waiter.InstanceStatusOk
 def wait_till_passed_checks(instance_id):
-    print ('Waiting for instance to pass checks, cannot ssh until then :( , will take 2 minutes or longer')
+    utils.print_and_log('Waiting for instance to pass checks, cannot ssh until then :( , will take 2 minutes or longer')
     client = boto3.client('ec2')
     waiter = client.get_waiter('instance_status_ok')
     waiter.wait(
@@ -73,45 +73,45 @@ def wait_till_passed_checks(instance_id):
             instance_id,
         ]
     )
-    print ('Instance has passed status checks and now can be accessed by ssh!!')
+    utils.print_and_log('Instance has passed status checks and now can be accessed by ssh!!')
 
 
 # Simple check does ssh work by passing pwd to ssh command to instance
 def check_ssh(public_ip, key_path):
     ssh_check_cmd = "ssh -t -o StrictHostKeyChecking=no -i " + key_path + " ec2-user@" + public_ip + " 'sudo pwd'"
-    print ('Going to check does ssh work with simple pwd command on instance')
+    utils.print_and_log('Going to check does ssh work with simple pwd command on instance')
     (status, output) = subprocess.getstatusoutput(ssh_check_cmd)
     if status == 0:
-        print ('Simple ssh test passed!!')
+        utils.print_and_log('Simple ssh test passed!!')
     else:
-        print ('Simple ssh failed')
-        print (status, output)
+        utils.print_and_log('Simple ssh failed')
+        utils.print_and_log(output)
         sys.exit(1)
 
 
 # Copy check_webserver.py to instance
 def copy_check_webserver(public_ip, key_path):
     copy_check_web_server_cmd = 'scp -i ' + key_path + ' check_webserver.py ec2-user@' + public_ip + ':.'
-    print ('Now trying to copy check_webserver to new instance with: ' + copy_check_web_server_cmd)
+    utils.print_and_log('Now trying to copy check_webserver to new instance with: ' + copy_check_web_server_cmd)
     (status, output) = subprocess.getstatusoutput(copy_check_web_server_cmd)
     if status == 0:
-        print ('Successfully copied check_webserver.py to new instance')
+        utils.print_and_log('Successfully copied check_webserver.py to new instance')
     else:
-        print ('Copy check_webserver.py failed :(')
+        utils.print_and_log('Copy check_webserver.py failed :(')
 
 
 # Run check_webserver.py on instance
 def run_check_webserver(public_ip, key_path):
     ssh_run_check_cmd = "ssh -t -o StrictHostKeyChecking=no -i " + key_path + " ec2-user@" \
                      + public_ip + " './check_webserver.py'"
-    print ('Now trying to run check_webserver in new instance with: ' + ssh_run_check_cmd)
+    utils.print_and_log('Now trying to run check_webserver in new instance with: ' + ssh_run_check_cmd)
     (status, output) = subprocess.getstatusoutput(ssh_run_check_cmd)
     if status == 0:
-        print ('Successfully run the check_webserver.py on instance')
-        print (status, output)
+        utils.print_and_log('Successfully run the check_webserver.py on instance')
+        utils.print_and_log(output)
     else:
-        print ('Run check_webserver.py failed')
-        print (status, output)
+        utils.print_and_log('Run check_webserver.py failed')
+        utils.print_and_log(output)
 
 
 # Create a new bucket
@@ -124,10 +124,10 @@ def create_bucket():
         try:
             response = s3.create_bucket(Bucket=bucket_name,
                                         CreateBucketConfiguration={'LocationConstraint': 'eu-west-1'})
-            print (response)
+            utils.print_and_log(response)
             return bucket_name
         except Exception as error:
-            print (error)
+            utils.print_and_log(error)
 
 
 # Puts a file into a bucket
@@ -137,9 +137,9 @@ def put_file_in_bucket(bucket_name, object_name):
         response = s3.Object(bucket_name, os.path.basename(object_name)).put(
             ACL='public-read',  # make public readable
             Body=open(object_name, 'rb'))
-        print (response)
+        utils.print_and_log(response)
     except Exception as error:
-        print (error)
+        utils.print_and_log(error)
 
 
 # Returns the url of a object in a bucket
@@ -153,7 +153,7 @@ def get_file_url(bucket_name, object_name):
                                             'Key': object_name,
                                         },
                                         ExpiresIn=3600)
-    print (url)
+    utils.print_and_log(url)
     split = url.split('?')  # split url into a list at '?' as the above generates a url link that will be expired
     return split[0]  # Return the url with no expiry date
 
@@ -162,13 +162,13 @@ def get_file_url(bucket_name, object_name):
 def change_index_file_permission(public_ip, key_path):
     ssh_permission_cmd = "ssh -t -o StrictHostKeyChecking=no -i " + key_path +" ec2-user@" \
                      + public_ip + " 'sudo chmod 646 /usr/share/nginx/html/index.html'"
-    print ('Trying to change permission on index.html')
+    utils.print_and_log('Trying to change permission on index.html')
     (status, output) = subprocess.getstatusoutput(ssh_permission_cmd)
     if status == 0:
-        print ('Successfully changed the file permission')
+        utils.print_and_log('Successfully changed the file permission')
     else:
-        print ('Failed to change file permission')
-        print (status, output)
+        utils.print_and_log('Failed to change file permission')
+        utils.print_and_log(output)
 
 
 # Append image uploaded to bucket to the end of index.html of nginx
@@ -192,14 +192,13 @@ def append_image_to_index(public_ip, image_url, key_path):
     cmd = " 'sudo echo " + str + " >> /usr/share/nginx/html/index.html'"  # compose bash command to pass by ssh
 
     ssh_cmd = "ssh -t -o StrictHostKeyChecking=no -i " + key_path + " ec2-user@" + public_ip + cmd
-    print ('Now trying to append image url to index html with: ' + ssh_cmd)
+    utils.print_and_log('Now trying to append image url to index html with: ' + ssh_cmd)
     (status, output) = subprocess.getstatusoutput(ssh_cmd)
     if status == 0:
-        print ('Successfully appended to index ')
+        utils.print_and_log('Successfully appended to index ')
     else:
-        print ('Image append failed')
-        print (ssh_cmd)
-        print (status, output)
+        utils.print_and_log('Image append failed')
+        utils.print_and_log(output)
 
 
 # Main function
@@ -232,7 +231,7 @@ def main():
         append_image_to_index(instance_public_ip,
                               get_file_url(created_bucket_name, os.path.basename(file_path)), key_path)
     except Exception as error:
-        print (error)
+        utils.print_and_log(error)
 
 
 # This is the standard boilerplate that calls the main() function.
