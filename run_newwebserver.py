@@ -71,18 +71,19 @@ def wait_till_public_ip(instance):
 
 # Simple check does ssh work by passing pwd to ssh command to instance
 def check_ssh(public_ip, key_path):
-    ssh_check_cmd = construct_ssh(key_path, public_ip, " 'sudo pwd'")
     exit_loop = 0
-    while exit_loop != 10:
+    while exit_loop <= 10:
+        ssh_check_cmd = construct_ssh(key_path, public_ip, " 'sudo pwd'")
         (status, output) = subprocess.getstatusoutput(ssh_check_cmd)
         if status == 0:
             utils.print_and_log('Instance is ready to ssh')
             break
-        elif exit_loop == 5:
+        elif exit_loop == 10:
             utils.print_and_log("Exit loop code 5 reached - instance wasn't ready in time exiting loop")
             utils.print_and_log(output)
         else:
-            utils.print_and_log('Instance is not ready to ssh yet, trying again in 15 seconds')
+            utils.print_and_log('Instance is not ready to ssh yet, trying again in 15 seconds - loop '
+                                + str(exit_loop) + '/10')
             exit_loop += 1
             time.sleep(15)
 
@@ -105,15 +106,18 @@ def copy_check_webserver(public_ip, key_path):
 
 # Run check_webserver.py on instance
 def run_check_webserver(public_ip, key_path):
-    ssh_run_check_cmd = construct_ssh(key_path, public_ip, " './check_webserver.py'")
-    utils.print_and_log('Now trying to run check_webserver in new instance with')
+    utils.print_and_log('Now trying to run check_webserver in instance')
     exit_loop = 0
     while exit_loop <= 10:
+        ssh_run_check_cmd = construct_ssh(key_path, public_ip, " './check_webserver.py'")
         (status, output) = subprocess.getstatusoutput(ssh_run_check_cmd)
         if status == 0:
             utils.print_and_log('Successfully run the check_webserver.py on instance')
             utils.print_and_log(output)
             break
+        elif 'Permission denied (publickey)' in output:
+            print ('Wrong key to ssh to instance')
+            key_path = utils.get_valid_key('Re-enter path to key: ')
         elif exit_loop == 10:
             if 'No such file or directory' in output:
                 print ('check_websever.py doesn\'t seem to be on instance')
@@ -254,16 +258,16 @@ def list_buckets():
 
 # List instances for running check server
 def list_instances():
-    name_map = {}
+    name_map = {}  # Create empty dictionary
     i = 1
     ec2 = boto3.resource('ec2')
     print ('\n#', '\tInstance ID', '\t\tPublic IP Adrress')
     for instance in ec2.instances.all():
-        if instance.state['Name'] == 'running':
-            name_map[str(i)] = instance.public_ip_address
+        if instance.state['Name'] == 'running':  # for only instances that are running
+            name_map[str(i)] = instance.public_ip_address  # map current value of i as key to public address value
             print (i, '\t' + instance.id, '\t' + instance.public_ip_address)
             i += 1
-    return name_map
+    return name_map  # return dictionary of running instances
 
 
 # Main menu of script
