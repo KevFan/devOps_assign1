@@ -118,6 +118,10 @@ def run_check_webserver(public_ip, key_path):
         elif 'Permission denied (publickey)' in output:
             print ('Wrong key to ssh to instance')
             key_path = utils.get_valid_key('Re-enter path to key: ')
+        elif '/usr/bin/python3: bad interpreter: No such file' in output:
+            print ('Python35 not installed')
+            install_python35(key_path, public_ip)
+            print ('Running run_check_webserver again')
         elif exit_loop == 10:
             if 'No such file or directory' in output:
                 print ('check_websever.py doesn\'t seem to be on instance')
@@ -268,6 +272,18 @@ def list_instances():
             print (i, '\t' + instance.id, '\t' + instance.public_ip_address)
             i += 1
     return name_map  # return dictionary of running instances
+
+
+# Method to install python35 on instance on case where it wasn't installed for script to run
+def install_python35(key_path, public_ip):
+    install_cmd = construct_ssh(key_path, public_ip, " 'sudo yum install -y python35'")
+    utils.print_and_log('Installing python35')
+    (status, output) = subprocess.getstatusoutput(install_cmd)
+    if status == 0:
+        utils.print_and_log('Successfully installed python35')
+    else:
+        utils.print_and_log('Failed to install python35')
+        utils.print_and_log(output)
 
 
 # Main menu of script
