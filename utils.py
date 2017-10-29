@@ -1,6 +1,7 @@
 import os
 import datetime
 import boto3
+import subprocess
 
 
 # Returns the absolute path to a file with a simple loop to check that the file exists
@@ -33,14 +34,6 @@ def check_user_has_key(key_name):
         return False
 
 
-# Get relative path to a file - Unused
-def get_rel_file_path(prompt):
-    key_path = os.path.relpath(input(prompt))  # get user input of file path
-    while os.path.exists(key_path) is False:  # loop until the input is a valid path
-        key_path = os.path.relpath(input("Path error - " + prompt))
-    return key_path
-
-
 # Asks user to get input path to key for ssh
 # Key is checked and only returns if valid
 def get_valid_key(prompt):
@@ -70,3 +63,8 @@ def print_and_log(message):
     print (str(message))
     with open("log.txt", "a") as log_file:
         log_file.write('\n' + str(datetime.datetime.now()) + ' - ' + str(message))
+
+
+def clear_screen():
+    tmp = subprocess.call('clear', shell=True)
+
