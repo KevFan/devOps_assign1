@@ -108,18 +108,28 @@ def run_check_webserver(public_ip, key_path):
     ssh_run_check_cmd = construct_ssh(key_path, public_ip, " './check_webserver.py'")
     utils.print_and_log('Now trying to run check_webserver in new instance with')
     exit_loop = 0
-    while exit_loop != 10:
+    while exit_loop <= 10:
         (status, output) = subprocess.getstatusoutput(ssh_run_check_cmd)
         if status == 0:
             utils.print_and_log('Successfully run the check_webserver.py on instance')
             utils.print_and_log(output)
             break
-        elif status == 10:
-            utils.print_and_log('Exiting due to exit loop limit reached')
-            utils.print_and_log(output)
+        elif exit_loop == 10:
+            if 'No such file or directory' in output:
+                print ('check_websever.py doesn\'t seem to be on instance')
+                choice = input('Copy check_webserver to instance (y/n): ').lower()
+                if choice == 'y':
+                    copy_check_webserver(public_ip, key_path)
+                else:
+                    print ('Returning to main menu')
+            else:
+                utils.print_and_log('Exiting due to exit loop limit reached')
+                utils.print_and_log(output)
         else:
-            utils.print_and_log('Run check_webserver.py failed, trying again in 15 seconds')
+            utils.print_and_log('Run check_webserver.py failed, trying again in 15 seconds - loop '
+                                + str(exit_loop) + '/10')
             time.sleep(15)
+            exit_loop += 1
 
 
 # Create a new bucket
@@ -128,7 +138,7 @@ def create_bucket():
         bucket_name = input("\nBucket name: ").lower()
         try:
             response = s3.create_bucket(Bucket=bucket_name,
-                                        CreateBucketConfiguration={'LocationConstraint': 'eu-west-1'})
+                                        CreateBucketConfiguration={'LocationConstraint': utils.default_region()})
             utils.print_and_log(response)
             choice = input("Would you like to upload file to this bucket now? (y/n)")
             if choice == 'y':
@@ -224,9 +234,10 @@ def construct_ssh(key_path, public_ip, cmd):
 def list_buckets():
     name_map = {}
     i = 1
+    print ('#', '\tBucket Name')
     for bucket in s3.buckets.all():
         name_map[str(i)] = bucket.name
-        print (str(i) + ": " + bucket.name)
+        print (str(i) + "\t" + bucket.name)
         i += 1
     if len(name_map) == 0:
         print ("You have no buckets. Create one at the main menu")
@@ -250,7 +261,7 @@ def list_instances():
     for instance in ec2.instances.all():
         if instance.state['Name'] == 'running':
             name_map[str(i)] = instance.public_ip_address
-            print (i,  '\t' + instance.id, '\t' + instance.public_ip_address)
+            print (i, '\t' + instance.id, '\t' + instance.public_ip_address)
             i += 1
     return name_map
 
@@ -300,7 +311,6 @@ def main():
                         break
                     except Exception as error:
                         print ("Error: Not a valid option")
-
         elif choice == "0":
             print ("Exiting")
             sys.exit(0)
