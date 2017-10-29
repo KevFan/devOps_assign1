@@ -205,6 +205,21 @@ def construct_ssh(key_path, public_ip, cmd):
     return "ssh -t -o StrictHostKeyChecking=no -i " + key_path + " ec2-user@" + public_ip + cmd
 
 
+def list_buckets():
+    name_map = {}
+    i = 1
+    for bucket in s3.buckets.all():
+        name_map[str(i)] = bucket.name
+        print (str(i) + ": " + bucket.name)
+    while True:
+        try:
+            choice = input("Enter number of bucket: ")
+            put_file_in_bucket(name_map[choice])
+            break
+        except Exception as error:
+            print ("Error: Not a valid option")
+
+
 def menu():
     print ('''
 Welcome
@@ -233,6 +248,7 @@ def main():
             create_bucket()
         elif choice == "4":
             print ("Upload to bucket")
+            list_buckets()
         elif choice == "5":
             print ("Exiting")
             sys.exit(0)
