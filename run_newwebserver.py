@@ -124,9 +124,8 @@ def run_check_webserver(public_ip, key_path):
 
 # Create a new bucket
 def create_bucket():
-    utils.clear_screen()
     while True:
-        bucket_name = input("Bucket name: ").lower()
+        bucket_name = input("\nBucket name: ").lower()
         try:
             response = s3.create_bucket(Bucket=bucket_name,
                                         CreateBucketConfiguration={'LocationConstraint': 'eu-west-1'})
@@ -143,13 +142,30 @@ def create_bucket():
 
 # Puts a file into a bucket
 def put_file_in_bucket(bucket_name):
-    file_path = utils.get_abs_file_path('Path of file to put into bucket: ')  # get file name to upload to bucket
+    file_path = utils.get_abs_file_path('\nPath of file to put into bucket: ')  # get file name to upload to bucket
     try:  # set object name to just the base name as would otherwise create the folders to file.
         # Would have problems, especially when path to object is relative and when getting file link
         response = s3.Object(bucket_name, os.path.basename(file_path)).put(
             ACL='public-read',  # make public readable
             Body=open(file_path, 'rb'))
         utils.print_and_log(response)
+        choice = input("Would you like to append file to index html (y/n): ").lower()
+        if choice == 'y':
+            url = get_file_url(bucket_name, os.path.basename(file_path))
+            name_map = list_instances()
+            if len(name_map) == 0:
+                print ("You have no running instances to append to html")
+            else:
+                while True:
+                    try:
+                        public_ip = name_map[input("Enter number of instance: ")]
+                        key_path = utils.get_valid_key("Enter path to your private key: ")
+                        change_index_file_permission(public_ip, key_path)
+                        append_image_to_index(public_ip, url, key_path)
+                        break
+                    except Exception as error:
+                        print ("Error: Not a valid option")
+
     except Exception as error:
         utils.print_and_log(error)
 
@@ -165,8 +181,8 @@ def get_file_url(bucket_name, object_name):
                                             'Key': object_name,
                                         },
                                         ExpiresIn=3600)
-    utils.print_and_log(url)
     split = url.split('?')  # split url into a list at '?' as the above generates a url link that will be expired
+    utils.print_and_log('Url: ' + split[0])
     return split[0]  # Return the url with no expiry date
 
 
@@ -199,10 +215,12 @@ def append_image_to_index(public_ip, image_url, key_path):
         utils.print_and_log(output)
 
 
+# Helper to construct ssh command to reduce duplication
 def construct_ssh(key_path, public_ip, cmd):
     return "ssh -t -o StrictHostKeyChecking=no -i " + key_path + " ec2-user@" + public_ip + cmd
 
 
+# List buckets for upload
 def list_buckets():
     name_map = {}
     i = 1
@@ -223,30 +241,21 @@ def list_buckets():
                 print ("Error: Not a valid option")
 
 
+# List instances for running check server
 def list_instances():
     name_map = {}
     i = 1
     ec2 = boto3.resource('ec2')
-    print ('#', '\tInstance ID', '\t\tPublic IP Adrress')
+    print ('\n#', '\tInstance ID', '\t\tPublic IP Adrress')
     for instance in ec2.instances.all():
         if instance.state['Name'] == 'running':
             name_map[str(i)] = instance.public_ip_address
             print (i,  '\t' + instance.id, '\t' + instance.public_ip_address)
             i += 1
-    if len(name_map) == 0:
-        print ("You have no instances running. Create one at the main menu")
-        time.sleep(3)
-    else:
-        while True:
-            try:
-                choice = input("Enter number of instance: ")
-                key_path = utils.get_valid_key("Enter path to your private key: ")
-                run_check_webserver(name_map[choice], key_path)
-                break
-            except Exception as error:
-                print ("Error: Not a valid option")
+    return name_map
 
 
+# Main menu of script
 def menu():
     print ('''
 Welcome
@@ -263,12 +272,11 @@ Welcome
 def main():
     while True:
         menu()
-        choice = input("Enter your choice: ")
+        choice = input("\nEnter your choice: ")
         if choice == "1":
             print ("Create instance and bucket")
             create_instance()
             create_bucket()
-            # TODO: Need to incorporate back in image appending
         elif choice == "2":
             print ("Create instance")
             create_instance()
@@ -279,7 +287,20 @@ def main():
             print ("Upload to bucket")
             list_buckets()
         elif choice == "5":
-            list_instances()
+            name_map = list_instances()
+            if len(name_map) == 0:
+                print ("You have no instances running. Create one at the main menu")
+                time.sleep(3)
+            else:
+                while True:
+                    try:
+                        choice = input("Enter number of instance: ")
+                        key_path = utils.get_valid_key("Enter path to your private key: ")
+                        run_check_webserver(name_map[choice], key_path)
+                        break
+                    except Exception as error:
+                        print ("Error: Not a valid option")
+
         elif choice == "0":
             print ("Exiting")
             sys.exit(0)
