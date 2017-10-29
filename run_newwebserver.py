@@ -210,13 +210,17 @@ def list_buckets():
         name_map[str(i)] = bucket.name
         print (str(i) + ": " + bucket.name)
         i += 1
-    while True:
-        try:
-            choice = input("Enter number of bucket: ")
-            put_file_in_bucket(name_map[choice])
-            break
-        except Exception as error:
-            print ("Error: Not a valid option")
+    if len(name_map) == 0:
+        print ("You have no buckets. Create one at the main menu")
+        time.sleep(3)
+    else:
+        while True:
+            try:
+                choice = input("Enter number of bucket: ")
+                put_file_in_bucket(name_map[choice])
+                break
+            except Exception as error:
+                print ("Error: Not a valid option")
 
 
 def list_instances():
@@ -225,17 +229,22 @@ def list_instances():
     ec2 = boto3.resource('ec2')
     print ('#', '\tInstance ID', '\t\tPublic IP Adrress')
     for instance in ec2.instances.all():
-        name_map[str(i)] = instance.public_ip_address
-        print (i, '\t' + instance.id, '\t' + instance.public_ip_address)
-        i += 1
-    while True:
-        try:
-            choice = input("Enter number of instance: ")
-            key_path = utils.get_valid_key("Enter path to your private key: ")
-            run_check_webserver(name_map[choice], key_path)
-            break
-        except Exception as error:
-            print ("Error: Not a valid option")
+        if instance.state['Name'] == 'running':
+            name_map[str(i)] = instance.public_ip_address
+            print (i,  '\t' + instance.id, '\t' + instance.public_ip_address)
+            i += 1
+    if len(name_map) == 0:
+        print ("You have no instances running. Create one at the main menu")
+        time.sleep(3)
+    else:
+        while True:
+            try:
+                choice = input("Enter number of instance: ")
+                key_path = utils.get_valid_key("Enter path to your private key: ")
+                run_check_webserver(name_map[choice], key_path)
+                break
+            except Exception as error:
+                print ("Error: Not a valid option")
 
 
 def menu():
