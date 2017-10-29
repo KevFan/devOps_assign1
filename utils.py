@@ -54,17 +54,27 @@ def get_valid_key(prompt):
         if key_path.endswith('.pem') and check_user_has_key(os.path.basename(key_path).split('.')[0]) \
                 and os.path.exists(key_path):
             exit_boolean = True
-            print_and_log("Your key is valid !!")
+            print_and_log("Key is valid in this region")
     return key_path
 
 
-# Helper function to print a message and write message to log file
+# Helper function to print a message and write message to log file with a date time
 def print_and_log(message):
     print (str(message))
     with open("log.txt", "a") as log_file:
         log_file.write('\n' + str(datetime.datetime.now()) + ' - ' + str(message))
 
 
+# Clear the terminal
 def clear_screen():
-    tmp = subprocess.call('clear', shell=True)
+    tmp = subprocess.call('clear', shell=True)  # assign to variable so that 0 doesnt display to terminal
 
+
+# Get default region is aws config
+def default_region():
+    # open aws config file - require os.path.expanduser to recognise ~
+    f = open(os.path.expanduser('~/.aws/config'), 'rU')
+    for line in f:
+        if 'region' in line:  # if line contains region
+            split = line.split('=')  # slit the line at = as the delimiter
+            return split[1].strip()  # return the second word in list and devoid of whitespace
