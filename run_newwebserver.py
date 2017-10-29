@@ -52,9 +52,6 @@ def create_instance():
         # Ssh related
         check_ssh(instance_public_ip, key_path)
         copy_check_webserver(instance_public_ip, key_path)
-        run_check_webserver(instance_public_ip, key_path)
-
-        # return instance[0]
     except Exception as error:
         utils.print_and_log('Instance creation failed - exiting')
         utils.print_and_log(error)
@@ -109,12 +106,13 @@ def copy_check_webserver(public_ip, key_path):
 # Run check_webserver.py on instance
 def run_check_webserver(public_ip, key_path):
     ssh_run_check_cmd = construct_ssh(key_path, public_ip, " './check_webserver.py'")
-    utils.print_and_log('Now trying to run check_webserver in new instance with: ')
+    utils.print_and_log('Now trying to run check_webserver in new instance with')
     exit_loop = 0
     while exit_loop != 10:
         (status, output) = subprocess.getstatusoutput(ssh_run_check_cmd)
         if status == 0:
             utils.print_and_log('Successfully run the check_webserver.py on instance')
+            utils.print_and_log(output)
             break
         elif status == 10:
             utils.print_and_log('Exiting due to exit loop limit reached')
@@ -211,10 +209,30 @@ def list_buckets():
     for bucket in s3.buckets.all():
         name_map[str(i)] = bucket.name
         print (str(i) + ": " + bucket.name)
+        i += 1
     while True:
         try:
             choice = input("Enter number of bucket: ")
             put_file_in_bucket(name_map[choice])
+            break
+        except Exception as error:
+            print ("Error: Not a valid option")
+
+
+def list_instances():
+    name_map = {}
+    i = 1
+    ec2 = boto3.resource('ec2')
+    print ('#', '\tInstance ID', '\t\tPublic IP Adrress')
+    for instance in ec2.instances.all():
+        name_map[str(i)] = instance.public_ip_address
+        print (i, '\t' + instance.id, '\t' + instance.public_ip_address)
+        i += 1
+    while True:
+        try:
+            choice = input("Enter number of instance: ")
+            key_path = utils.get_valid_key("Enter path to your private key: ")
+            run_check_webserver(name_map[choice], key_path)
             break
         except Exception as error:
             print ("Error: Not a valid option")
@@ -227,7 +245,9 @@ Welcome
     2. Create instance 
     3. Create bucket 
     4. Upload to bucket
-    5. Exit''')
+    5. Run check_server on instance
+    ===================
+    0. Exit''')
 
 
 # Main function
@@ -250,6 +270,8 @@ def main():
             print ("Upload to bucket")
             list_buckets()
         elif choice == "5":
+            list_instances()
+        elif choice == "0":
             print ("Exiting")
             sys.exit(0)
         else:
