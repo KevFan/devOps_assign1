@@ -38,7 +38,7 @@ def create_instance():
                 },
             ],
             SecurityGroupIds=[
-                'sg-8842b9f3',  # Id of security group already created with http & ssh enabled
+                utils.get_security_group(),  # Id of security group already created with http & ssh enabled
             ],
             UserData='''#!/bin/bash
                         yum -y update
@@ -118,10 +118,6 @@ def run_check_webserver(public_ip, key_path):
         elif 'Permission denied (publickey)' in output:
             print ('Wrong key to ssh to instance')
             key_path = utils.get_valid_key('Re-enter path to key: ')
-        elif '/usr/bin/python3: bad interpreter: No such file' in output:
-            print ('Python35 not installed')
-            install_python35(key_path, public_ip)
-            print ('Running run_check_webserver again')
         elif exit_loop == 10:
             if 'No such file or directory' in output:
                 print ('check_websever.py doesn\'t seem to be on instance')
@@ -130,6 +126,11 @@ def run_check_webserver(public_ip, key_path):
                     copy_check_webserver(public_ip, key_path)
                 else:
                     print ('Returning to main menu')
+            elif '/usr/bin/python3: bad interpreter: No such file' in output:
+                print ('Python35 not installed')
+                install_python35(key_path, public_ip)
+                print ('Running run_check_webserver again')
+                exit_loop = 0
             else:
                 utils.print_and_log('Exiting due to exit loop limit reached')
                 utils.print_and_log(output)

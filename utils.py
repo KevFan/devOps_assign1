@@ -78,3 +78,25 @@ def default_region():
         if 'region' in line:  # if line contains region
             split = line.split('=')  # slit the line at = as the delimiter
             return split[1].strip()  # return the second word in list and devoid of whitespace
+
+
+# Helper to get security group id of specific name 'kevin-http-ssh'
+# Creates the group if not found
+def get_security_group():
+    client = boto3.client('ec2')
+    response = client.describe_security_groups()
+    security_groups = (response['SecurityGroups'])
+    group_names = {}
+    for group in security_groups:
+        group_names[group['GroupName']] = group['GroupId']
+    if 'kevin-http-ssh' not in group_names.keys():
+        print_and_log('kevin-http-ssh security group not found.. Creating..')
+        ec2 = boto3.resource('ec2')
+        mysg = ec2.create_security_group(GroupName="kevin-http-ssh", Description='kevin-http-ssh')
+        mysg.authorize_ingress(IpProtocol="tcp", CidrIp="0.0.0.0/0", FromPort=80, ToPort=80)
+        mysg.authorize_ingress(IpProtocol="tcp", CidrIp="0.0.0.0/0", FromPort=22, ToPort=22)
+        print_and_log('kevin-http-ssh created with ports 80 & 22 open: ' + mysg.id)
+        return mysg.id
+    else:
+        print_and_log('kevin-http-ssh security group found: ' + group_names['kevin-http-ssh'])
+        return group_names['kevin-http-ssh']
