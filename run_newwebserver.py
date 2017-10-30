@@ -62,11 +62,14 @@ def create_instance():
 def wait_till_public_ip(instance):
     print ('Waiting for instance to get a public ip to access later')
     while not instance.public_ip_address:  # loop through till break condition (when the instance get's public ip)
-        instance.reload()  # reload the instance property
-        if instance.public_ip_address:  # if the created instance gets an public ip
-            public_ip = instance.public_ip_address  # store the public ip for ssh later
-            utils.print_and_log('Instance Public IP: ' + public_ip)
-            return public_ip
+        try:
+            instance.reload()  # reload the instance property
+            if instance.public_ip_address:  # if the created instance gets an public ip
+                public_ip = instance.public_ip_address  # store the public ip for ssh later
+                utils.print_and_log('Instance Public IP: ' + public_ip)
+                return public_ip
+        except Exception as error:
+            print (error)
 
 
 # Simple check does ssh work by passing pwd to ssh command to instance
@@ -287,6 +290,17 @@ def install_python35(key_path, public_ip):
         utils.print_and_log(output)
 
 
+def get_instance_usage(key_path, public_ip):
+    ssh_permission_cmd = construct_ssh(key_path, public_ip, " 'top -n 1'")
+    (status, output) = subprocess.getstatusoutput(ssh_permission_cmd)
+    if status == 0:
+        print (output)
+        time.sleep(5)
+    else:
+        print ('Get usage failed ')
+        print (output)
+
+
 # Main menu of script
 def menu():
     print ('''
@@ -296,6 +310,7 @@ Welcome
     3. Create bucket 
     4. Upload to bucket
     5. Run check_server on instance
+    6. Print basic cpu usage on instance
     ===================
     0. Exit''')
 
@@ -332,6 +347,16 @@ def main():
                         break
                     except Exception as error:
                         print ("Error: Not a valid option")
+        elif choice == '6':
+            while True:
+                try:
+                    name_map = list_instances()
+                    choice = input("Enter number of instance: ")
+                    key_path = utils.get_valid_key("Enter path to your private key: ")
+                    get_instance_usage(key_path, name_map[choice])
+                    break
+                except Exception as error:
+                    print ("Error: Not a valid option")
         elif choice == "0":
             print ("Exiting")
             sys.exit(0)
