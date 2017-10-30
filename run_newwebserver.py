@@ -180,7 +180,7 @@ def put_file_in_bucket(bucket_name):
                     try:
                         key_path = utils.get_valid_key("Enter path to your private key: ")
                         change_index_file_permission(public_ip, key_path)
-                        append_image_to_index(public_ip, url, key_path)
+                        append_to_index(public_ip, url, key_path)
                         break
                     except Exception as error:
                         print ("Error: Not a valid option")
@@ -218,11 +218,13 @@ def change_index_file_permission(public_ip, key_path):
 
 
 # Append image uploaded to bucket to the end of index.html of nginx
-def append_image_to_index(public_ip, image_url, key_path):
-    # Use echo to append to the bottom of the index.html
-    str = '"<img src=\"' + image_url + '">\"'  # enclose html in img tags
-
-    cmd = " 'sudo echo " + str + " >> /usr/share/nginx/html/index.html'"  # compose bash command to pass by ssh
+# Use echo to append to the bottom of the index.html
+def append_to_index(public_ip, url, key_path):
+    if url.endswith('.png') or url.endswith('.jpg') or url.endswith('.gif'):  # if the url is a common image format
+        tag_url = '"<img src=\"' + url + '">\"'  # enclose html in img tags
+    else:  # otherwise encase as a link with the url basename
+        tag_url = '"<a href=\"' + url + '">' + os.path.basename(url) + '</a>\"'
+    cmd = " 'sudo echo " + tag_url + " >> /usr/share/nginx/html/index.html'"  # compose bash command to pass by ssh
 
     ssh_cmd = construct_ssh(key_path, public_ip, cmd)
     utils.print_and_log('Now trying to append image url to index html with: ' + ssh_cmd)
