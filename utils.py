@@ -83,20 +83,26 @@ def default_region():
 # Helper to get security group id of specific name 'kevin-http-ssh'
 # Creates the group if not found
 def get_security_group():
+    sg_name_to_find = 'kevin-http-ssh'  # Name to find in dictionary
     client = boto3.client('ec2')
-    response = client.describe_security_groups()
-    security_groups = (response['SecurityGroups'])
-    group_names = {}
-    for group in security_groups:
+    response = client.describe_security_groups()  # get all user security groups
+    security_groups = (response['SecurityGroups'])  # assign security groups from response to variable
+    group_names = {}  # Empty dictionary to later map security group name with security group id
+    for group in security_groups:  # For each security group, map the group name as key to group id as value
         group_names[group['GroupName']] = group['GroupId']
-    if 'kevin-http-ssh' not in group_names.keys():
-        print_and_log('kevin-http-ssh security group not found.. Creating..')
-        ec2 = boto3.resource('ec2')
-        mysg = ec2.create_security_group(GroupName="kevin-http-ssh", Description='kevin-http-ssh')
-        mysg.authorize_ingress(IpProtocol="tcp", CidrIp="0.0.0.0/0", FromPort=80, ToPort=80)
-        mysg.authorize_ingress(IpProtocol="tcp", CidrIp="0.0.0.0/0", FromPort=22, ToPort=22)
-        print_and_log('kevin-http-ssh created with ports 80 & 22 open: ' + mysg.id)
-        return mysg.id
-    else:
-        print_and_log('kevin-http-ssh security group found: ' + group_names['kevin-http-ssh'])
-        return group_names['kevin-http-ssh']
+    if sg_name_to_find not in group_names.keys():  # if kevin-http-ssh is not found in the dictionary keys
+        print_and_log(sg_name_to_find + ' security group not found.. Creating..')
+        return make_security_group(sg_name_to_find).id
+    else:  # Otherwise get kevin-http-ssh security group id from dictionary
+        print_and_log(sg_name_to_find + ' security group found: ' + group_names[sg_name_to_find])
+        return group_names[sg_name_to_find]
+
+
+# Create security group with port 10 and 22 enabled - sg_name must not be already present to create
+def make_security_group(sg_name):
+    ec2 = boto3.resource('ec2')  # Create the security group with port 80 and 22 enabled and return the id
+    mysg = ec2.create_security_group(GroupName=sg_name, Description=sg_name)
+    mysg.authorize_ingress(IpProtocol="tcp", CidrIp="0.0.0.0/0", FromPort=80, ToPort=80)
+    mysg.authorize_ingress(IpProtocol="tcp", CidrIp="0.0.0.0/0", FromPort=22, ToPort=22)
+    print_and_log(sg_name + ' created with ports 80 & 22 open: ' + mysg.id)
+    return mysg
