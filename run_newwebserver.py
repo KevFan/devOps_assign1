@@ -38,7 +38,7 @@ def create_instance():
                 },
             ],
             SecurityGroupIds=[
-                utils.get_security_group(),  # Id of security group already created with http & ssh enabled
+                utils.get_security_group(),  # call util method to create or get security group id
             ],
             UserData='''#!/bin/bash
                         yum -y update
@@ -55,48 +55,47 @@ def create_instance():
     except Exception as error:
         utils.print_and_log('Instance creation failed - exiting')
         utils.print_and_log(error)
-        sys.exit(1)
 
 
 # Function to wait till instance get's a public ip and returns the public ip
 def wait_till_public_ip(instance):
     print ('Waiting for instance to get a public ip to access later')
     while not instance.public_ip_address:  # loop through till break condition (when the instance get's public ip)
-        try:
+        try:  # try block as instance may not immediately exist
             instance.reload()  # reload the instance property
             if instance.public_ip_address:  # if the created instance gets an public ip
                 public_ip = instance.public_ip_address  # store the public ip for ssh later
                 utils.print_and_log('Instance Public IP: ' + public_ip)
                 return public_ip
         except Exception as error:
-            print (error)
+            utils.print_and_log(error)
 
 
 # Simple check does ssh work by passing pwd to ssh command to instance
 def check_ssh(public_ip, key_path):
-    exit_loop = 0
-    while exit_loop <= 10:
+    exit_loop = 0  # Loop control variable
+    while exit_loop <= 10:  # Loop ssh command as can take a while for instance to be up after creation
         ssh_check_cmd = construct_ssh(key_path, public_ip, " 'sudo pwd'")
         (status, output) = subprocess.getstatusoutput(ssh_check_cmd)
-        if status == 0:
+        if status == 0:  # ssh command ran ok
             utils.print_and_log('Instance is ready to ssh')
             break
-        elif exit_loop == 10:
-            utils.print_and_log("Exit loop code 5 reached - instance wasn't ready in time exiting loop")
+        elif exit_loop == 10:  # On condition where loop has reach 10
+            utils.print_and_log("Loop 10 reached - instance wasn't ready in time.. exiting loop")
             utils.print_and_log(output)
-        else:
+        else:  # Increase exit_loop by 1 and sleep for 15 seconds before running ssh command again
             utils.print_and_log('Instance is not ready to ssh yet, trying again in 15 seconds - loop '
                                 + str(exit_loop) + '/10')
             exit_loop += 1
             time.sleep(15)
 
 
-# Copy check_webserver.py to instance
+# Copy check_webserver.py to instance using scp
 def copy_check_webserver(public_ip, key_path):
     copy_check_web_server_cmd = 'scp -i ' + key_path + ' check_webserver.py ec2-user@' + public_ip + ':.'
     utils.print_and_log('Now trying to copy check_webserver to new instance with: ' + copy_check_web_server_cmd)
     (status, output) = subprocess.getstatusoutput(copy_check_web_server_cmd)
-    if status == 0:
+    if status == 0:  # if successfully copied, asked user do they want to run check webserver
         utils.print_and_log('Successfully copied check_webserver.py to new instance')
         choice = input("Would you like to run check websever (y/n): ").lower()
         if choice == 'y':
@@ -110,34 +109,34 @@ def copy_check_webserver(public_ip, key_path):
 # Run check_webserver.py on instance
 def run_check_webserver(public_ip, key_path):
     utils.print_and_log('Now trying to run check_webserver in instance')
-    exit_loop = 0
-    while exit_loop <= 10:
+    exit_loop = 0  # Loop control variable
+    while exit_loop <= 10:  # loop as can take a while for instance to be up and for scp copying
         ssh_run_check_cmd = construct_ssh(key_path, public_ip, " './check_webserver.py'")
         (status, output) = subprocess.getstatusoutput(ssh_run_check_cmd)
-        if status == 0:
+        if status == 0:  # Successfully ran ssh command
             utils.print_and_log('Successfully run the check_webserver.py on instance')
             utils.print_and_log(output)
             break
-        elif 'Permission denied (publickey)' in output:
-            print ('Wrong key to ssh to instance')
+        elif 'Permission denied (publickey)' in output:  # If public key was wrong
+            utils.print_and_log('Wrong key to ssh to instance')
             key_path = utils.get_valid_key('Re-enter path to key: ')
-        elif exit_loop == 10:
-            if 'No such file or directory' in output:
-                print ('check_websever.py doesn\'t seem to be on instance')
+        elif exit_loop == 10:  # On the 10th loop
+            if 'No such file or directory' in output:  # if there was no check_webserver on instance, ask to copy over
+                utils.print_and_log('check_websever.py doesn\'t seem to be on instance')
                 choice = input('Copy check_webserver to instance (y/n): ').lower()
                 if choice == 'y':
                     copy_check_webserver(public_ip, key_path)
                 else:
                     print ('Returning to main menu')
-            elif '/usr/bin/python3: bad interpreter: No such file' in output:
-                print ('Python35 not installed')
-                install_python35(key_path, public_ip)
-                print ('Running run_check_webserver again')
+            elif '/usr/bin/python3: bad interpreter: No such file' in output:  # if python3 wasn't installed on instance
+                utils.print_and_log('Python35 doesn\'t seem to on instance')
+                install_python35(key_path, public_ip)  # install on instance and run loop again
+                utils.print_and_log('Running run_check_webserver again')
                 exit_loop = 0
-            else:
+            else:  # Otherwise exit loop
                 utils.print_and_log('Exiting due to exit loop limit reached')
                 utils.print_and_log(output)
-        else:
+        else:  # increase loop variable by 1 and sleep for 15 seconds
             utils.print_and_log('Run check_webserver.py failed, trying again in 15 seconds - loop '
                                 + str(exit_loop) + '/10')
             time.sleep(15)
@@ -146,18 +145,19 @@ def run_check_webserver(public_ip, key_path):
 
 # Create a new bucket
 def create_bucket():
-    while True:
-        bucket_name = input("\nBucket name: ").lower()
+    while True:  # Loop as till break condition as bucket name must be unique
+        bucket_name = input("\nBucket name: ").lower()  # bucket name must be all lower case
         try:
-            response = s3.create_bucket(Bucket=bucket_name,
-                                        CreateBucketConfiguration={'LocationConstraint': utils.default_region()})
+            response = s3.create_bucket(
+                Bucket=bucket_name,  # create bucket with name and default region in aws config
+                CreateBucketConfiguration={'LocationConstraint': utils.default_region()})
             utils.print_and_log(response)
-            choice = input("Would you like to upload file to this bucket now? (y/n)")
-            if choice == 'y':
+            choice = input("Would you like to upload file to this bucket now? (y/n)")  # ask user to upload file
+            if choice == 'y':  # if input is y
                 put_file_in_bucket(bucket_name)
-            else:
+            else:  # otherwise break loop
                 utils.print_and_log("Returning back to main menu")
-            break
+                break
         except Exception as error:
             utils.print_and_log(error)
 
@@ -174,13 +174,10 @@ def put_file_in_bucket(bucket_name):
         choice = input("Would you like to append file to index html (y/n): ").lower()
         if choice == 'y':
             url = get_file_url(bucket_name, os.path.basename(file_path))
-            name_map = list_instances()
-            if len(name_map) == 0:
-                print ("You have no running instances to append to html")
-            else:
+            public_ip = get_instance_ip()
+            if public_ip:  # If there is a public ip returned
                 while True:
                     try:
-                        public_ip = name_map[input("Enter number of instance: ")]
                         key_path = utils.get_valid_key("Enter path to your private key: ")
                         change_index_file_permission(public_ip, key_path)
                         append_image_to_index(public_ip, url, key_path)
@@ -242,40 +239,49 @@ def construct_ssh(key_path, public_ip, cmd):
     return "ssh -t -o StrictHostKeyChecking=no -i " + key_path + " ec2-user@" + public_ip + cmd
 
 
-# List buckets for upload
-def list_buckets():
-    name_map = {}
-    i = 1
+# List buckets and get file to upload if there are buckets
+def list_and_upload_bucket():
+    bucket_map = {}  # empty empty that will be used to map value to bucket name
+    i = 1  # iterable vale that is used as key to bucket name dictionary value
     print ('#', '\tBucket Name')
-    for bucket in s3.buckets.all():
-        name_map[str(i)] = bucket.name
+    for bucket in s3.buckets.all():  # For each bucket the user owns
+        bucket_map[str(i)] = bucket.name  # Map current i value as key to bucket name to dictonary
         print (str(i) + "\t" + bucket.name)
-        i += 1
-    if len(name_map) == 0:
+        i += 1  # increase i by 1
+    if len(bucket_map) == 0:  # If dictionary if empty i.e have no buckets
         print ("You have no buckets. Create one at the main menu")
         time.sleep(3)
-    else:
+    else:  # Otherwise loop to get user input for bucket number to get bucket name from dictionary
         while True:
             try:
                 choice = input("Enter number of bucket: ")
-                put_file_in_bucket(name_map[choice])
+                put_file_in_bucket(bucket_map[choice])
                 break
             except Exception as error:
                 print ("Error: Not a valid option")
 
 
 # List instances for running check server
-def list_instances():
-    name_map = {}  # Create empty dictionary
-    i = 1
+def get_instance_ip():
+    instance_dict = {}  # Create empty dictionary
+    i = 1  # Value to iterate as key for dictonary
     ec2 = boto3.resource('ec2')
     print ('\n#', '\tInstance ID', '\t\tPublic IP Adrress')
     for instance in ec2.instances.all():
         if instance.state['Name'] == 'running':  # for only instances that are running
-            name_map[str(i)] = instance.public_ip_address  # map current value of i as key to public address value
+            instance_dict[str(i)] = instance.public_ip_address  # map current value of i as key to public address value
             print (i, '\t' + instance.id, '\t' + instance.public_ip_address)
             i += 1
-    return name_map  # return dictionary of running instances
+    if len(instance_dict) == 0:  # if there are no instances running
+        print ("You have no instances. Create one at the main menu")
+        time.sleep(3)
+    else:  # if there are running instances, get input from user to get instance public ip
+        while True:
+            try:
+                choice = input("Enter number of instance: ")
+                return instance_dict[choice]  # Get's public ip from dictionary and return
+            except Exception as error:
+                print ("Error: Not a valid option")
 
 
 # Method to install python35 on instance on case where it wasn't installed for script to run
@@ -290,15 +296,15 @@ def install_python35(key_path, public_ip):
         utils.print_and_log(output)
 
 
+# Get basic instance cpu info from instance
 def get_instance_usage(key_path, public_ip):
-    ssh_permission_cmd = construct_ssh(key_path, public_ip, " 'top -n 1'")
-    (status, output) = subprocess.getstatusoutput(ssh_permission_cmd)
+    usage_cmd = construct_ssh(key_path, public_ip, " 'top -n 1 -b'")
+    (status, output) = subprocess.getstatusoutput(usage_cmd)
     if status == 0:
-        print (output)
+        utils.print_and_log(output)
         time.sleep(5)
     else:
-        print ('Get usage failed ')
-        print (output)
+        utils.print_and_log('Get usage failed ' + output)
 
 
 # Main menu of script
@@ -332,31 +338,23 @@ def main():
             create_bucket()
         elif choice == "4":
             print ("Upload to bucket")
-            list_buckets()
+            list_and_upload_bucket()
         elif choice == "5":
-            name_map = list_instances()
-            if len(name_map) == 0:
-                print ("You have no instances running. Create one at the main menu")
-                time.sleep(3)
-            else:
-                while True:
-                    try:
-                        choice = input("Enter number of instance: ")
-                        key_path = utils.get_valid_key("Enter path to your private key: ")
-                        run_check_webserver(name_map[choice], key_path)
-                        break
-                    except Exception as error:
-                        print ("Error: Not a valid option")
-        elif choice == '6':
-            while True:
-                try:
-                    name_map = list_instances()
-                    choice = input("Enter number of instance: ")
+            try:
+                public_ip = get_instance_ip()
+                if public_ip:
                     key_path = utils.get_valid_key("Enter path to your private key: ")
-                    get_instance_usage(key_path, name_map[choice])
-                    break
-                except Exception as error:
-                    print ("Error: Not a valid option")
+                    run_check_webserver(public_ip, key_path)
+            except Exception as error:
+                utils.print_and_log("Run Check Server Error: " + str(error))
+        elif choice == '6':
+            try:
+                public_ip = get_instance_ip()
+                if public_ip:
+                    key_path = utils.get_valid_key("Enter path to your private key: ")
+                    get_instance_usage(key_path, public_ip)
+            except Exception as error:
+                utils.print_and_log("Get Instance Usage Error: " + str(error))
         elif choice == "0":
             print ("Exiting")
             sys.exit(0)
