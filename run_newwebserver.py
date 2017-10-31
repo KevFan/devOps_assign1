@@ -160,6 +160,7 @@ def create_bucket():
             choice = input("Would you like to upload file to this bucket now (y/n): ")  # ask user to upload file
             if choice == 'y':  # if input is y
                 put_file_in_bucket(bucket_name)
+                break
             else:  # otherwise break loop
                 utils.print_and_log("Returning back to main menu")
                 break
@@ -184,7 +185,6 @@ def put_file_in_bucket(bucket_name):
                 while True:
                     try:
                         key_path = make_key_read_only(utils.get_valid_key("Enter path to your private key: "))
-                        change_index_file_permission(public_ip, key_path)
                         append_to_index(public_ip, url, key_path)
                         break
                     except Exception as error:
@@ -225,6 +225,12 @@ def change_index_file_permission(public_ip, key_path):
 # Append image uploaded to bucket to the end of index.html of nginx
 # Use echo to append to the bottom of the index.html
 def append_to_index(public_ip, url, key_path):
+    # If index.html permissions are not 646 (needed to append url) - call change index file permission
+    (status, output) = subprocess.getstatusoutput(
+        construct_ssh(key_path, public_ip, " 'sudo stat -c \"%a %n\" /usr/share/nginx/html/index.html'"))
+    if '646' not in output:
+        change_index_file_permission(public_ip, key_path)
+
     if url.endswith('.png') or url.endswith('.jpg') or url.endswith('.gif'):  # if the url is a common image format
         tag_url = '"<img src=\"' + url + '">\"'  # enclose html in img tags
     else:  # otherwise encase as a link with the url basename
@@ -271,7 +277,7 @@ def list_and_upload_bucket():
 # List instances for running check server
 def get_instance_ip():
     instance_dict = {}  # Create empty dictionary
-    i = 1  # Value to iterate as key for dictonary
+    i = 1  # Value to iterate as key for dictionary
     ec2 = boto3.resource('ec2')
     print ('\n#', '\tInstance ID', '\t\tPublic IP Adrress')
     for instance in ec2.instances.all():
