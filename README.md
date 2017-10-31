@@ -43,6 +43,14 @@ chmod 700 run_newwebserver.py
 
 Running these command will give the main script read, write and execution permissions and bring up menu for user interaction.
 
+## Running tests
+```
+# In project directory
+python3 TestMethods.py -v
+```
+
+Only 3 methods are tested as they do not accept input from user or interact with boto api 
+
 ## List of Software + Technologies Used
 * [PyCharm](https://www.jetbrains.com/pycharm/) - Python IDE
 * [Boto3](http://boto3.readthedocs.io/en/latest/guide/quickstart.html) - (AWS) SDK for Python
@@ -50,8 +58,8 @@ Running these command will give the main script read, write and execution permis
 * [Pylint](https://www.pylint.org/) - Python source code analyzer
 
 ## Improvements
-* Testing done manually - should test using unittest
-* Do not hard code value for ami id (currnetly Ireland region) which are region specific- would likely cause problems if user's default region is different
+* Testing done most manually - not extensively tested using unittest
+* Do not hard code value for ami id (currnetly Ireland region) which are region specific - would likely cause problems if user's default region is different
 * Incorporate cloudwatch for instance monitoring 
 * Incorporate ssh specific library such as paramiko for ssh to instance instead of using subprocess library
 
