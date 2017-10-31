@@ -1,7 +1,7 @@
 import os
 import datetime
-import boto3
 import subprocess
+import boto3
 
 
 # Returns the absolute path to a file with a simple loop to check that the file exists
@@ -51,7 +51,8 @@ def get_valid_key(prompt):
         if check_user_has_key(os.path.basename(key_path).split('.')[0]) is False:
             key_path = os.path.abspath(input("Re-" + prompt))
         # If key satisfies all the conditions above - exit loop
-        if key_path.endswith('.pem') and check_user_has_key(os.path.basename(key_path).split('.')[0]) \
+        if key_path.endswith('.pem') \
+                and check_user_has_key(os.path.basename(key_path).split('.')[0]) \
                 and os.path.exists(key_path):
             exit_boolean = True
             print_and_log("Key is valid in this region")
@@ -60,21 +61,22 @@ def get_valid_key(prompt):
 
 # Helper function to print a message and write message to log file with a date time
 def print_and_log(message):
-    print (str(message))
+    print(str(message))
     with open("log.txt", "a") as log_file:
         log_file.write('\n' + str(datetime.datetime.now()) + ' - ' + str(message))
 
 
 # Clear the terminal
 def clear_screen():
-    tmp = subprocess.call('clear', shell=True)  # assign to variable so that 0 doesnt display to terminal
+    # assign to variable so that 0 doesnt display to terminal
+    tmp = subprocess.call('clear', shell=True)
 
 
 # Get default region is aws config
 def default_region():
     # open aws config file - require os.path.expanduser to recognise ~
-    f = open(os.path.expanduser('~/.aws/config'), 'rU')
-    for line in f:
+    read_file = open(os.path.expanduser('~/.aws/config'), 'rU')
+    for line in read_file:
         if 'region' in line:  # if line contains region
             split = line.split('=')  # slit the line at = as the delimiter
             return split[1].strip()  # return the second word in list and devoid of whitespace
@@ -86,21 +88,27 @@ def get_security_group():
     sg_name_to_find = 'kevin-http-ssh'  # Name to find in dictionary
     client = boto3.client('ec2')
     response = client.describe_security_groups()  # get all user security groups
-    security_groups = (response['SecurityGroups'])  # assign security groups from response to variable
+    security_groups = (response['SecurityGroups'])  # assign response security groups to variable
     group_names = {}  # Empty dictionary to later map security group name with security group id
-    for group in security_groups:  # For each security group, map the group name as key to group id as value
+
+    # For each security group, map the group name as key to group id as value
+    for group in security_groups:
         group_names[group['GroupName']] = group['GroupId']
-    if sg_name_to_find not in group_names.keys():  # if kevin-http-ssh is not found in the dictionary keys
+
+    # if kevin-http-ssh is not found in the dictionary keys
+    if sg_name_to_find not in group_names.keys():
         print_and_log(sg_name_to_find + ' security group not found.. Creating..')
         return make_security_group(sg_name_to_find).id
-    else:  # Otherwise get kevin-http-ssh security group id from dictionary
-        print_and_log(sg_name_to_find + ' security group found: ' + group_names[sg_name_to_find])
-        return group_names[sg_name_to_find]
+
+    # Otherwise get kevin-http-ssh security group id from dictionary
+    print_and_log(sg_name_to_find + ' security group found: ' + group_names[sg_name_to_find])
+    return group_names[sg_name_to_find]
 
 
-# Create security group with port 10 and 22 enabled - sg_name must not be already present to create
+# Create security group with port 10 and 22 enabled and return the id
+#  sg_name must not be already present to create, otherwise will throw exception
 def make_security_group(sg_name):
-    ec2 = boto3.resource('ec2')  # Create the security group with port 80 and 22 enabled and return the id
+    ec2 = boto3.resource('ec2')
     mysg = ec2.create_security_group(GroupName=sg_name, Description=sg_name)
     mysg.authorize_ingress(IpProtocol="tcp", CidrIp="0.0.0.0/0", FromPort=80, ToPort=80)
     mysg.authorize_ingress(IpProtocol="tcp", CidrIp="0.0.0.0/0", FromPort=22, ToPort=22)

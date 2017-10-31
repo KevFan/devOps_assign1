@@ -1,16 +1,18 @@
 #!/usr/bin/python3
 
-import boto3
-import subprocess
-import utils
 import os
 import sys
 import time
+import subprocess
+import utils
+import boto3
 
 s3 = boto3.resource("s3")
+ec2 = boto3.resource('ec2')
 
 
-# Creates a new ec2 instance - ImageId in the Ireland region - requires the config file to be set in eu-west-1
+# Creates a new ec2 instance - ImageId in the Ireland region
+# Requires the config file to be set in eu-west-1
 def create_instance():
     utils.clear_screen()
     # Get instance info from the user
@@ -19,7 +21,6 @@ def create_instance():
     key_name = utils.get_file_name_from_path(key_path)
 
     try:
-        ec2 = boto3.resource('ec2')
         instance = ec2.create_instances(
             ImageId='ami-acd005d5',
             MinCount=1,
@@ -47,7 +48,7 @@ def create_instance():
         )
         created_instance = instance[0]
         utils.print_and_log('Created instance Id: ' + created_instance.id)
-        instance_public_ip = wait_till_public_ip(created_instance)  # Used to eventually store the instance public ip
+        instance_public_ip = wait_till_public_ip(created_instance)  # store the instance public ip
 
         # Ssh related
         check_ssh(instance_public_ip, key_path)
@@ -60,11 +61,11 @@ def create_instance():
 # Function to wait till instance get's a public ip and returns the public ip
 def wait_till_public_ip(instance):
     utils.print_and_log('Waiting for instance to get a public ip to access later')
-    while not instance.public_ip_address:  # loop through till break condition (when the instance get's public ip)
+    while not instance.public_ip_address:  # loop through till when the instance get's public ip
         try:  # try block as instance may not immediately exist
             instance.reload()  # reload the instance property
             if instance.public_ip_address:  # if the created instance gets an public ip
-                public_ip = instance.public_ip_address  # store the public ip for ssh later
+                public_ip = instance.public_ip_address
                 utils.print_and_log('Instance Public IP: ' + public_ip)
                 return public_ip
         except Exception as error:
@@ -74,7 +75,7 @@ def wait_till_public_ip(instance):
 # Simple check does ssh work by passing pwd to ssh command to instance
 def check_ssh(public_ip, key_path):
     exit_loop = 0  # Loop control variable
-    while exit_loop <= 10:  # Loop ssh command as can take a while for instance to be up after creation
+    while exit_loop <= 10:  # Loop as can take a while for instance to be up after creation
         ssh_check_cmd = construct_ssh(key_path, public_ip, " 'sudo pwd'")
         (status, output) = subprocess.getstatusoutput(ssh_check_cmd)
         if status == 0:  # ssh command ran ok
@@ -87,21 +88,21 @@ def check_ssh(public_ip, key_path):
             utils.print_and_log(output)
             break
         else:  # Increase exit_loop by 1 and sleep for 15 seconds before running ssh command again
-            utils.print_and_log('Instance is not ready to ssh yet, trying again in 15 seconds - loop '
-                                + str(exit_loop) + '/10')
+            utils.print_and_log('Instance is not ready to ssh yet, trying again in 15 seconds '
+                                '- loop ' + str(exit_loop) + '/10')
             exit_loop += 1
             time.sleep(15)
 
 
 # Copy check_webserver.py to instance using scp
 def copy_check_webserver(public_ip, key_path):
-    copy_check_web_server_cmd = 'scp -i ' + key_path + ' check_webserver.py ec2-user@' + public_ip + ':.'
-    utils.print_and_log('Now trying to copy check_webserver to new instance with: ' + copy_check_web_server_cmd)
-    (status, output) = subprocess.getstatusoutput(copy_check_web_server_cmd)
+    scp_cmd = 'scp -i ' + key_path + ' check_webserver.py ec2-user@' + public_ip + ':.'
+    utils.print_and_log('Now trying to copy check_webserver to instance')
+    (status, output) = subprocess.getstatusoutput(scp_cmd)
     if status == 0:  # if successfully copied, change permissions to make it executable
         utils.print_and_log('Successfully copied check_webserver.py to new instance')
-        (status, output) = subprocess.getstatusoutput(construct_ssh(key_path, public_ip,
-                                                                    " 'chmod 700 ./check_webserver.py'"))
+        (status, output) = subprocess.getstatusoutput(
+            construct_ssh(key_path, public_ip, " 'chmod 700 ./check_webserver.py'"))
         if status == 0:  # if successful, run check webserver
             utils.print_and_log('Made check_webserver executable on instance')
             run_check_webserver(public_ip, key_path)
@@ -126,14 +127,15 @@ def run_check_webserver(public_ip, key_path):
             utils.print_and_log('Wrong key to ssh to instance')
             key_path = make_key_read_only(utils.get_valid_key('Re-enter path to key: '))
         elif exit_loop == 10:  # On the 10th loop
-            if 'No such file or directory' in output:  # if there was no check_webserver on instance, ask to copy over
+            if 'No such file or directory' in output:  # if there was no check_webserver on instance
                 utils.print_and_log('check_websever.py doesn\'t seem to be on instance')
                 choice = input('Copy check_webserver to instance (y/n): ').lower()
-                if choice == 'y':
+                if choice == 'y':  # copy to instance if y
                     copy_check_webserver(public_ip, key_path)
                 else:
-                    print ('Returning to main menu')
-            elif '/usr/bin/python3: bad interpreter: No such file' in output:  # if python3 wasn't installed on instance
+                    print('Returning to main menu')
+            # if python3 wasn't installed on instance
+            elif '/usr/bin/python3: bad interpreter: No such file' in output:
                 utils.print_and_log('Python35 doesn\'t seem to on instance')
                 install_python35(key_path, public_ip)  # install on instance and run loop again
                 utils.print_and_log('Running run_check_webserver again')
@@ -149,7 +151,7 @@ def run_check_webserver(public_ip, key_path):
             exit_loop += 1
 
 
-# Create a new bucket
+# Create a new bucket and ask user do they want to upload file
 def create_bucket():
     while True:  # Loop as till break condition as bucket name must be unique
         bucket_name = input("\nBucket name: ").lower()  # bucket name must be all lower case
@@ -158,7 +160,7 @@ def create_bucket():
                 Bucket=bucket_name,  # create bucket with name and default region in aws config
                 CreateBucketConfiguration={'LocationConstraint': utils.default_region()})
             utils.print_and_log(response)
-            choice = input("Would you like to upload file to this bucket now (y/n): ")  # ask user to upload file
+            choice = input("Would you like to upload file to this bucket now (y/n): ")
             if choice == 'y':  # if input is y
                 put_file_in_bucket(bucket_name)
                 break
@@ -171,7 +173,8 @@ def create_bucket():
 
 # Puts a file into a bucket
 def put_file_in_bucket(bucket_name):
-    file_path = utils.get_abs_file_path('\nPath of file to put into bucket: ')  # get file name to upload to bucket
+    # get file name to upload to bucket
+    file_path = utils.get_abs_file_path('\nPath of file to put into bucket: ')
     try:  # set object name to just the base name as would otherwise create the folders to file.
         # Would have problems, especially when path to object is relative and when getting file link
         response = s3.Object(bucket_name, os.path.basename(file_path)).put(
@@ -185,11 +188,12 @@ def put_file_in_bucket(bucket_name):
             if public_ip:  # If there is a public ip returned
                 while True:
                     try:
-                        key_path = make_key_read_only(utils.get_valid_key("Enter path to your private key: "))
+                        key_path = make_key_read_only(
+                            utils.get_valid_key("Enter path to your private key: "))
                         append_to_index(public_ip, url, key_path)
                         break
                     except Exception as error:
-                        print ("Error: Not a valid option")
+                        print("Error: Not a valid option")
 
     except Exception as error:
         utils.print_and_log(error)
@@ -206,14 +210,17 @@ def get_file_url(bucket_name, object_name):
                                             'Key': object_name,
                                         },
                                         ExpiresIn=3600)
-    split = url.split('?')  # split url into a list at '?' as the above generates a url link that will be expired
+    # split url into a list at '?' as the above generates a url link that will be expired
+    split = url.split('?')
     utils.print_and_log('Url: ' + split[0])
     return split[0]  # Return the url with no expiry date
 
 
-# Change the file permission for write access of index.html - needed to echo into file for image appending later
+# Change the file permission for write access of index.html
+# Needed to echo into file for image appending later
 def change_index_file_permission(public_ip, key_path):
-    ssh_permission_cmd = construct_ssh(key_path, public_ip, " 'sudo chmod 646 /usr/share/nginx/html/index.html'")
+    ssh_permission_cmd = construct_ssh(
+        key_path, public_ip, " 'sudo chmod 646 /usr/share/nginx/html/index.html'")
     utils.print_and_log('Trying to change permission on index.html')
     (status, output) = subprocess.getstatusoutput(ssh_permission_cmd)
     if status == 0:
@@ -226,17 +233,20 @@ def change_index_file_permission(public_ip, key_path):
 # Append image uploaded to bucket to the end of index.html of nginx
 # Use echo to append to the bottom of the index.html
 def append_to_index(public_ip, url, key_path):
-    # If index.html permissions are not 646 (needed to append url) - call change index file permission
-    (status, output) = subprocess.getstatusoutput(
-        construct_ssh(key_path, public_ip, " 'sudo stat -c \"%a %n\" /usr/share/nginx/html/index.html'"))
+    # If index.html permissions are not 646 (needed to append url)
+    # call change index file permission
+    (status, output) = subprocess.getstatusoutput(construct_ssh(key_path, public_ip, " 'sudo stat -c \"%a %n\" /usr/share/nginx/html/index.html'"))
     if '646' not in output:
         change_index_file_permission(public_ip, key_path)
 
-    if url.endswith('.png') or url.endswith('.jpg') or url.endswith('.gif'):  # if the url is a common image format
-        tag_url = '"<img src=\"' + url + '">\"'  # enclose html in img tags
+    # if the url is a common image format - enclose url in img tags
+    if url.endswith('.png') or url.endswith('.jpg') or url.endswith('.gif'):
+        tag_url = '"<img src=\"' + url + '">\"'
     else:  # otherwise encase as a link with the url basename
         tag_url = '"<a href=\"' + url + '">' + os.path.basename(url) + '</a>\"'
-    cmd = " 'sudo echo " + tag_url + " >> /usr/share/nginx/html/index.html'"  # compose bash command to pass by ssh
+
+    # compose bash command to pass by ssh
+    cmd = " 'sudo echo " + tag_url + " >> /usr/share/nginx/html/index.html'"
 
     ssh_cmd = construct_ssh(key_path, public_ip, cmd)
     utils.print_and_log('\nNow trying to append image url to index html with: ' + ssh_cmd)
@@ -257,13 +267,13 @@ def construct_ssh(key_path, public_ip, cmd):
 def list_and_upload_bucket():
     bucket_map = {}  # empty empty that will be used to map value to bucket name
     i = 1  # iterable vale that is used as key to bucket name dictionary value
-    print ('#', '\tBucket Name')
+    print('#', '\tBucket Name')
     for bucket in s3.buckets.all():  # For each bucket the user owns
         bucket_map[str(i)] = bucket.name  # Map current i value as key to bucket name to dictonary
-        print (str(i) + "\t" + bucket.name)
+        print(str(i) + "\t" + bucket.name)
         i += 1  # increase i by 1
     if len(bucket_map) == 0:  # If dictionary if empty i.e have no buckets
-        print ("You have no buckets. Create one at the main menu")
+        print("You have no buckets. Create one at the main menu")
         time.sleep(3)
     else:  # Otherwise loop to get user input for bucket number to get bucket name from dictionary
         while True:
@@ -272,22 +282,21 @@ def list_and_upload_bucket():
                 put_file_in_bucket(bucket_map[choice])
                 break
             except Exception as error:
-                print ("Error: Not a valid option")
+                print("Error: Not a valid option" + str(error))
 
 
 # List instances for running check server
 def get_instance_ip():
     instance_dict = {}  # Create empty dictionary
     i = 1  # Value to iterate as key for dictionary
-    ec2 = boto3.resource('ec2')
-    print ('\n#', '\tInstance ID', '\t\tPublic IP Adrress')
+    print('\n#', '\tInstance ID', '\t\tPublic IP Adrress')
     for instance in ec2.instances.all():
         if instance.state['Name'] == 'running':  # for only instances that are running
             instance_dict[str(i)] = instance.public_ip_address  # map current value of i as key to public address value
-            print (i, '\t' + instance.id, '\t' + instance.public_ip_address)
+            print(i, '\t' + instance.id, '\t' + instance.public_ip_address)
             i += 1
     if len(instance_dict) == 0:  # if there are no instances running
-        print ("You have no instances. Create one at the main menu")
+        print("You have no instances. Create one at the main menu")
         time.sleep(3)
     else:  # if there are running instances, get input from user to get instance public ip
         while True:
@@ -295,7 +304,7 @@ def get_instance_ip():
                 choice = input("Enter number of instance: ")
                 return instance_dict[choice]  # Get's public ip from dictionary and return
             except Exception as error:
-                print ("Error: Not a valid option")
+                print("Error: Not a valid option" + str(error))
 
 
 # Method to install python35 on instance on case where it wasn't installed for script to run
@@ -336,7 +345,7 @@ def make_key_read_only(key_path):
 
 # Main menu of script
 def menu():
-    print ('''
+    print('''
 Welcome
     1. Create instance and bucket
     2. Create instance 
@@ -354,17 +363,17 @@ def main():
         menu()
         choice = input("\nEnter your choice: ")
         if choice == "1":
-            print ("Create instance and bucket")
+            print("Create instance and bucket")
             create_instance()
             create_bucket()
         elif choice == "2":
-            print ("Create instance")
+            print("Create instance")
             create_instance()
         elif choice == "3":
-            print ("Create bucket")
+            print("Create bucket")
             create_bucket()
         elif choice == "4":
-            print ("Upload to bucket")
+            print("Upload to bucket")
             list_and_upload_bucket()
         elif choice == "5":
             try:
@@ -383,10 +392,10 @@ def main():
             except Exception as error:
                 utils.print_and_log("Get Instance Usage Error: " + str(error))
         elif choice == "0":
-            print ("Exiting")
+            print("Exiting")
             sys.exit(0)
         else:
-            print ("Not a valid choice")
+            print("Not a valid choice")
 
 
 # This is the standard boilerplate that calls the main() function.

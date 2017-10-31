@@ -8,12 +8,12 @@ def start_nginx():
     print('Going to start nginx with: ' + start_cmd)
     (status, output) = subprocess.getstatusoutput(start_cmd)
     if status == 0:
-        print ('Nginx is now up and running')
+        print('Nginx is now up and running')
     elif 'nginx: unrecognized service' in output:
         install_nginx()
     else:
-        print ('Start nginx - something is wrong :(')
-        print (status, output)
+        print('Start nginx - something is wrong :(')
+        print(status, output)
 
 
 # Function to check is nginx running (assuming it has been installed)
@@ -21,25 +21,25 @@ def check_nginx():
     cmd = 'ps -A | grep nginx'
     (status, output) = subprocess.getstatusoutput(cmd)
     if status == 0:
-        print ('Nginx server is already running')
+        print('Nginx server is already running')
     else:
-        print ('Nginx server is NOT running')
+        print('Nginx server is NOT running' + str(output))
         start_nginx()
 
 
 # Function to install nginx if not already installed
 def install_nginx():
-    print ('Nginx not installed')
+    print('Nginx not installed')
     choice = input('Install nginx (y/n): ').lower()
     if choice == 'y':
         install_cmd = 'sudo yum install -y nginx'
         (status, output) = subprocess.getstatusoutput(install_cmd)
         if status == 0:
-            print ('Nginx installed')
+            print('Nginx installed')
             start_nginx()
         else:
-            print ('Nginx install error')
-            print (output)
+            print('Nginx install error')
+            print(output)
 
 
 # Main funcion
