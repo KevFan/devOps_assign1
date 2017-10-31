@@ -14,8 +14,8 @@ s3 = boto3.resource("s3")
 def create_instance():
     utils.clear_screen()
     # Get instance info from the user
-    instance_name = input("Enter the name of your instance?: ")
-    key_path = utils.get_valid_key("Enter path to your private key: ")
+    instance_name = input("Enter the name of your instance: ")
+    key_path = make_key_read_only(utils.get_valid_key("Enter path to your private key: "))
     key_name = utils.get_file_name_from_path(key_path)
 
     try:
@@ -80,9 +80,12 @@ def check_ssh(public_ip, key_path):
         if status == 0:  # ssh command ran ok
             utils.print_and_log('Instance is ready to ssh')
             break
+        elif 'bad permissions' in output:  # If key is not read only to you
+            make_key_read_only(key_path)
         elif exit_loop == 10:  # On condition where loop has reach 10
             utils.print_and_log("Loop 10 reached - instance wasn't ready in time.. exiting loop")
             utils.print_and_log(output)
+            break
         else:  # Increase exit_loop by 1 and sleep for 15 seconds before running ssh command again
             utils.print_and_log('Instance is not ready to ssh yet, trying again in 15 seconds - loop '
                                 + str(exit_loop) + '/10')
@@ -95,13 +98,14 @@ def copy_check_webserver(public_ip, key_path):
     copy_check_web_server_cmd = 'scp -i ' + key_path + ' check_webserver.py ec2-user@' + public_ip + ':.'
     utils.print_and_log('Now trying to copy check_webserver to new instance with: ' + copy_check_web_server_cmd)
     (status, output) = subprocess.getstatusoutput(copy_check_web_server_cmd)
-    if status == 0:  # if successfully copied, asked user do they want to run check webserver
+    if status == 0:  # if successfully copied, change permissions to make it executable
         utils.print_and_log('Successfully copied check_webserver.py to new instance')
-        choice = input("Would you like to run check websever (y/n): ").lower()
-        if choice == 'y':
+        (status, output) = subprocess.getstatusoutput(construct_ssh(key_path, public_ip,
+                                                                    " 'chmod 700 ./check_webserver.py'"))
+        if status == 0:  # if successful, run check webserver
             run_check_webserver(public_ip, key_path)
         else:
-            utils.print_and_log("Exiting back to menu")
+            utils.print_and_log(str('Failed to change persmissions: ' + output))
     else:
         utils.print_and_log('Copy check_webserver.py failed :(')
 
@@ -119,7 +123,7 @@ def run_check_webserver(public_ip, key_path):
             break
         elif 'Permission denied (publickey)' in output:  # If public key was wrong
             utils.print_and_log('Wrong key to ssh to instance')
-            key_path = utils.get_valid_key('Re-enter path to key: ')
+            key_path = make_key_read_only(utils.get_valid_key('Re-enter path to key: '))
         elif exit_loop == 10:  # On the 10th loop
             if 'No such file or directory' in output:  # if there was no check_webserver on instance, ask to copy over
                 utils.print_and_log('check_websever.py doesn\'t seem to be on instance')
@@ -136,6 +140,7 @@ def run_check_webserver(public_ip, key_path):
             else:  # Otherwise exit loop
                 utils.print_and_log('Exiting due to exit loop limit reached')
                 utils.print_and_log(output)
+                break
         else:  # increase loop variable by 1 and sleep for 15 seconds
             utils.print_and_log('Run check_webserver.py failed, trying again in 15 seconds - loop '
                                 + str(exit_loop) + '/10')
@@ -152,7 +157,7 @@ def create_bucket():
                 Bucket=bucket_name,  # create bucket with name and default region in aws config
                 CreateBucketConfiguration={'LocationConstraint': utils.default_region()})
             utils.print_and_log(response)
-            choice = input("Would you like to upload file to this bucket now? (y/n)")  # ask user to upload file
+            choice = input("Would you like to upload file to this bucket now (y/n): ")  # ask user to upload file
             if choice == 'y':  # if input is y
                 put_file_in_bucket(bucket_name)
             else:  # otherwise break loop
@@ -178,7 +183,7 @@ def put_file_in_bucket(bucket_name):
             if public_ip:  # If there is a public ip returned
                 while True:
                     try:
-                        key_path = utils.get_valid_key("Enter path to your private key: ")
+                        key_path = make_key_read_only(utils.get_valid_key("Enter path to your private key: "))
                         change_index_file_permission(public_ip, key_path)
                         append_to_index(public_ip, url, key_path)
                         break
@@ -309,6 +314,19 @@ def get_instance_usage(key_path, public_ip):
         utils.print_and_log('Get usage failed ' + output)
 
 
+# Make key read only to you as otherwise would be ignored during ssh
+def make_key_read_only(key_path):
+    (status, output) = subprocess.getstatusoutput('stat -c "%a %n" ' + key_path)  # get file permission status
+    if '600' not in output:  # if not 600, change file permission
+        utils.print_and_log('Private key must by read only to you, othwerwise will be ignored')
+        (status, output) = subprocess.getstatusoutput("chmod 600 " + key_path)
+        if status == 0:
+            utils.print_and_log("Change key to read only by you, to avoid ssh problems")
+        else:
+            utils.print_and_log("Failed to change key permissions to read only by you " + output)
+    return key_path
+
+
 # Main menu of script
 def menu():
     print ('''
@@ -345,7 +363,7 @@ def main():
             try:
                 public_ip = get_instance_ip()
                 if public_ip:
-                    key_path = utils.get_valid_key("Enter path to your private key: ")
+                    key_path = make_key_read_only(utils.get_valid_key("Enter path to your private key: "))
                     run_check_webserver(public_ip, key_path)
             except Exception as error:
                 utils.print_and_log("Run Check Server Error: " + str(error))
@@ -353,7 +371,7 @@ def main():
             try:
                 public_ip = get_instance_ip()
                 if public_ip:
-                    key_path = utils.get_valid_key("Enter path to your private key: ")
+                    key_path = make_key_read_only(utils.get_valid_key("Enter path to your private key: "))
                     get_instance_usage(key_path, public_ip)
             except Exception as error:
                 utils.print_and_log("Get Instance Usage Error: " + str(error))
