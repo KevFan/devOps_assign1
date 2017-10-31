@@ -43,6 +43,12 @@ chmod 700 run_newwebserver.py
 
 Running these command will give the main script read, write and execution permissions and bring up menu for user interaction.
 
+## List of Software + Technologies Used
+* [PyCharm](https://www.jetbrains.com/pycharm/) - Python IDE
+* [Boto3](http://boto3.readthedocs.io/en/latest/guide/quickstart.html) - (AWS) SDK for Python
+* [Python3](https://www.python.org/)
+* [Pylint](https://www.pylint.org/) - Python source code analyzer
+
 ## Improvements
 * Testing done manually - should test using unittest
 * Do not hard code value for ami id (currnetly Ireland region) which are region specific- would likely cause problems if user's default region is different
@@ -54,4 +60,4 @@ Running these command will give the main script read, write and execution permis
 Kevin Fan ([KevFan](https://github.com/KevFan))
 
 ## Version/Date:
-30th October 2017
+31st October 2017
