@@ -59,7 +59,7 @@ def create_instance():
 
 # Function to wait till instance get's a public ip and returns the public ip
 def wait_till_public_ip(instance):
-    print ('Waiting for instance to get a public ip to access later')
+    utils.print_and_log('Waiting for instance to get a public ip to access later')
     while not instance.public_ip_address:  # loop through till break condition (when the instance get's public ip)
         try:  # try block as instance may not immediately exist
             instance.reload()  # reload the instance property
@@ -103,6 +103,7 @@ def copy_check_webserver(public_ip, key_path):
         (status, output) = subprocess.getstatusoutput(construct_ssh(key_path, public_ip,
                                                                     " 'chmod 700 ./check_webserver.py'"))
         if status == 0:  # if successful, run check webserver
+            utils.print_and_log('Made check_webserver executable on instance')
             run_check_webserver(public_ip, key_path)
         else:
             utils.print_and_log(str('Failed to change persmissions: ' + output))
@@ -112,7 +113,7 @@ def copy_check_webserver(public_ip, key_path):
 
 # Run check_webserver.py on instance
 def run_check_webserver(public_ip, key_path):
-    utils.print_and_log('Now trying to run check_webserver in instance')
+    utils.print_and_log('\nNow trying to run check_webserver in instance')
     exit_loop = 0  # Loop control variable
     while exit_loop <= 10:  # loop as can take a while for instance to be up and for scp copying
         ssh_run_check_cmd = construct_ssh(key_path, public_ip, " './check_webserver.py'")
@@ -238,7 +239,7 @@ def append_to_index(public_ip, url, key_path):
     cmd = " 'sudo echo " + tag_url + " >> /usr/share/nginx/html/index.html'"  # compose bash command to pass by ssh
 
     ssh_cmd = construct_ssh(key_path, public_ip, cmd)
-    utils.print_and_log('Now trying to append image url to index html with: ' + ssh_cmd)
+    utils.print_and_log('\nNow trying to append image url to index html with: ' + ssh_cmd)
     (status, output) = subprocess.getstatusoutput(ssh_cmd)
     if status == 0:
         utils.print_and_log('Successfully appended to index ')
@@ -314,10 +315,10 @@ def get_instance_usage(key_path, public_ip):
     usage_cmd = construct_ssh(key_path, public_ip, " 'top -n 1 -b'")
     (status, output) = subprocess.getstatusoutput(usage_cmd)
     if status == 0:
-        utils.print_and_log(output)
+        utils.print_and_log('\n' + output)
         time.sleep(5)
     else:
-        utils.print_and_log('Get usage failed ' + output)
+        utils.print_and_log('\nGet usage failed ' + output)
 
 
 # Make key read only to you as otherwise would be ignored during ssh
@@ -327,7 +328,7 @@ def make_key_read_only(key_path):
         utils.print_and_log('Private key must by read only to you, othwerwise will be ignored')
         (status, output) = subprocess.getstatusoutput("chmod 600 " + key_path)
         if status == 0:
-            utils.print_and_log("Change key to read only by you, to avoid ssh problems")
+            utils.print_and_log("Changed key to read only by you, to avoid ssh problems")
         else:
             utils.print_and_log("Failed to change key permissions to read only by you " + output)
     return key_path
