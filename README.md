@@ -7,8 +7,9 @@ Welcome
     3. Create bucket 
     4. Upload to bucket
     5. Run check_server on instance
+    6. Print basic cpu usage on instance
     ===================
-    0. Exit'
+    0. Exit
 
 ```
 
@@ -20,11 +21,12 @@ The overall objective of this assignment is to automate using Python 3 the proce
 * [Python3](https://www.python.org/)
 
 ## Feature List
-* check_webserver.py
+* run_newwebserver.py
     * Create instance and bucket
     * Upload to bucket
       * Append file url to a running instance to nginx index.html if installed  
     * Copy/Run check_server.py to instance
+    * Basic instance cpu report using top command
 * check_webserver.py
   * Checks and starts nginx if not running
   * If nginx is not installed, asks user to install
@@ -43,8 +45,8 @@ Running these command will give the main script read, write and execution permis
 
 ## Improvements
 * Testing done manually - should test using unittest
-* Do not hard code value for ami id which are region specific and secutiry group id - would cause problems as user's default region could be different
-* Incorporate cloudwatch for instance monitoring
+* Do not hard code value for ami id (currnetly Ireland region) which are region specific- would likely cause problems if user's default region is different
+* Incorporate cloudwatch for instance monitoring 
 * Incorporate ssh specific library such as paramiko for ssh to instance instead of using subprocess library
 
 
